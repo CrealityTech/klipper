@@ -10,14 +10,14 @@ class PrinterCANBus:
         self.ids = {}
     def add_uuid(self, config, canbus_uuid, canbus_iface):
         if canbus_uuid in self.ids:
-            raise config.error("Duplicate canbus_uuid")
+            raise config.error("""{"code":"key29", "msg":"Duplicate canbus_uuid", "values": []}""")
         new_id = len(self.ids)
         self.ids[canbus_uuid] = new_id
         return new_id
     def get_nodeid(self, canbus_uuid):
         if canbus_uuid not in self.ids:
-            raise self.printer.config_error("Unknown canbus_uuid %s"
-                                            % (canbus_uuid,))
+            raise self.printer.config_error("""{"code":"key30", "msg":"Unknown canbus_uuid %s", "values": ["%s"]}"""
+                                            % (canbus_uuid, canbus_uuid))
         return self.ids[canbus_uuid]
 
 def load_config(config):

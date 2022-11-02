@@ -135,7 +135,7 @@ class ADXLCommandHelper:
         # End measurements
         name = gcmd.get("NAME", time.strftime("%Y%m%d_%H%M%S"))
         if not name.replace('-', '').replace('_', '').isalnum():
-            raise gcmd.error("Invalid adxl345 NAME parameter")
+            raise gcmd.error("""{"code":"key64", "msg":"Invalid adxl345 NAME parameter", "values": []}""")
         bg_client = self.bg_client
         self.bg_client = None
         bg_client.finish_measurements()
@@ -154,7 +154,7 @@ class ADXLCommandHelper:
         aclient.finish_measurements()
         values = aclient.get_samples()
         if not values:
-            raise gcmd.error("No adxl345 measurements found")
+            raise gcmd.error("""{"code":"key232", "msg":"No adxl345 measurements found", "values": []}""")
         _, accel_x, accel_y, accel_z = values[-1]
         gcmd.respond_info("adxl345 values (x, y, z): %.6f, %.6f, %.6f"
                           % (accel_x, accel_y, accel_z))
@@ -232,11 +232,11 @@ class ADXL345:
               '-x': (0, -SCALE), '-y': (1, -SCALE), '-z': (2, -SCALE)}
         axes_map = config.getlist('axes_map', ('x','y','z'), count=3)
         if any([a not in am for a in axes_map]):
-            raise config.error("Invalid adxl345 axes_map parameter")
+            raise config.error('{"code": "key9", "msg": "Invalid adxl345 axes_map parameter"}')
         self.axes_map = [am[a.strip()] for a in axes_map]
         self.data_rate = config.getint('rate', 3200)
         if self.data_rate not in QUERY_RATES:
-            raise config.error("Invalid rate parameter: %d" % (self.data_rate,))
+            raise config.error("""{"code":"key245", "msg":"Invalid rate parameter: %d", "values": [%d]}""" % (self.data_rate,self.data_rate,))
         # Measurement storage (accessed from background thread)
         self.lock = threading.Lock()
         self.raw_samples = []
@@ -284,10 +284,8 @@ class ADXL345:
         stored_val = self.read_reg(reg)
         if stored_val != val:
             raise self.printer.command_error(
-                    "Failed to set ADXL345 register [0x%x] to 0x%x: got 0x%x. "
-                    "This is generally indicative of connection problems "
-                    "(e.g. faulty wiring) or a faulty adxl345 chip." % (
-                        reg, val, stored_val))
+                    """{"code":"key65", "msg":"Failed to set ADXL345 register [0x%x] to 0x%x: got 0x%x. \nThis is generally indicative of connection problems\n(e.g. faulty wiring)\nor a faulty adxl345 chip.", "values": ["%x","%x","%x"]}""" % (
+                        reg, val, stored_val, reg, val, stored_val))
     # Measurement collection
     def is_measuring(self):
         return self.query_rate > 0
@@ -337,7 +335,7 @@ class ADXL345:
             if fifo <= 32:
                 break
         else:
-            raise self.printer.command_error("Unable to query adxl345 fifo")
+            raise self.printer.command_error("""{"code":"key118", "msg":"Unable to query adxl345 fifo", "values": []}""")
         mcu_clock = self.mcu.clock32_to_clock64(params['clock'])
         sequence = (self.last_sequence & ~0xffff) | params['next_sequence']
         if sequence < self.last_sequence:
@@ -370,10 +368,8 @@ class ADXL345:
         dev_id = self.read_reg(REG_DEVID)
         if dev_id != ADXL345_DEV_ID:
             raise self.printer.command_error(
-                "Invalid adxl345 id (got %x vs %x).\n"
-                "This is generally indicative of connection problems\n"
-                "(e.g. faulty wiring) or a faulty adxl345 chip."
-                % (dev_id, ADXL345_DEV_ID))
+                """{"code":"key119", "msg": "Invalid adxl345 id (got %x vs %x).This is generally indicative of connection problems(e.g. faulty wiring) or a faulty adxl345 chip.", "values": ["%x", "%x"]}"""
+                % (dev_id, ADXL345_DEV_ID, dev_id, ADXL345_DEV_ID))
         # Setup chip in requested query rate
         self.set_reg(REG_POWER_CTL, 0x00)
         self.set_reg(REG_DATA_FORMAT, 0x0B)

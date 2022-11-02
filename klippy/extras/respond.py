@@ -34,8 +34,8 @@ class HostResponder:
                 prefix = respond_types[respond_type]
             else:
                 raise gcmd.error(
-                    "RESPOND TYPE '%s' is invalid. Must be one"
-                    " of 'echo', 'command', or 'error'" % (respond_type,))
+                    """{"code": "key309", "msg": "RESPOND TYPE '%s' is invalid. Must be one of 'echo', 'command', or 'error'", "values":["%s"]}""" % (
+                        respond_type, respond_type))
         prefix = gcmd.get('PREFIX', prefix)
         msg = gcmd.get('MSG', '')
         gcmd.respond_raw("%s %s" % (prefix, msg))

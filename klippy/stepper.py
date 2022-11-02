@@ -305,8 +305,7 @@ class PrinterRail:
         if (self.position_endstop < self.position_min
             or self.position_endstop > self.position_max):
             raise config.error(
-                "position_endstop in section '%s' must be between"
-                " position_min and position_max" % config.get_name())
+                """{"code":"key75", "msg": "Unable to infer homing_positive_dir in section '%s'", "values": ["%s"]}""" % (config.get_name(), config.get_name()))
         # Homing mechanics
         self.homing_speed = config.getfloat('homing_speed', 5.0, above=0.)
         self.second_homing_speed = config.getfloat(
@@ -325,8 +324,8 @@ class PrinterRail:
                 self.homing_positive_dir = True
             else:
                 raise config.error(
-                    "Unable to infer homing_positive_dir in section '%s'"
-                    % (config.get_name(),))
+                    """{"code":"key75", "msg": "Unable to infer homing_positive_dir in section '%s'", "values": ["%s"]}"""
+                    % (config.get_name(),config.get_name()))
             config.getboolean('homing_positive_dir', self.homing_positive_dir)
         elif ((self.homing_positive_dir
                and self.position_endstop == self.position_min)
@@ -379,9 +378,8 @@ class PrinterRail:
             changed_invert = pin_params['invert'] != endstop['invert']
             changed_pullup = pin_params['pullup'] != endstop['pullup']
             if changed_invert or changed_pullup:
-                raise error("Pinter rail %s shared endstop pin %s "
-                            "must specify the same pullup/invert settings" % (
-                                self.get_name(), pin_name))
+                raise error("""{"code":"key76", "msg": "Pinter rail %s shared endstop pin %s must specify the same pullup/invert settings", "values": ["%s", "%s"]}""" % (
+                                self.get_name(), pin_name, self.get_name(), pin_name))
         mcu_endstop.add_stepper(stepper)
     def setup_itersolve(self, alloc_func, *params):
         for stepper in self.steppers:

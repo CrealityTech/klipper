@@ -23,8 +23,7 @@ class ScrewsTiltAdjust:
             screw_name = config.get(prefix + "_name", screw_name)
             self.screws.append((screw_coord, screw_name))
         if len(self.screws) < 3:
-            raise config.error("screws_tilt_adjust: Must have "
-                               "at least three screws")
+            raise config.error({"code":"key173", "msg": "screws_tilt_adjust: Must have at least three screws", "values": []})
         self.threads = {'CW-M3': 0, 'CCW-M3': 1, 'CW-M4': 2, 'CCW-M4': 3,
                         'CW-M5': 4, 'CCW-M5': 5}
         self.thread = config.getchoice('screw_thread', self.threads,
@@ -52,8 +51,8 @@ class ScrewsTiltAdjust:
             direction = direction.upper()
             if direction not in ('CW', 'CCW'):
                 raise gcmd.error(
-                    "Error on '%s': DIRECTION must be either CW or CCW" % (
-                        gcmd.get_commandline(),))
+                    """{"code":"key174", "msg": "Error on '%s': DIRECTION must be either CW or CCW", "values": ["%s"]}""" % (
+                        gcmd.get_commandline(), gcmd.get_commandline()))
         self.direction = direction
         self.probe_helper.start_probe(gcmd)
 
@@ -106,8 +105,7 @@ class ScrewsTiltAdjust:
                     (name, coord[0], coord[1], z, sign, full_turns, minutes))
         if self.max_diff and any((d > self.max_diff) for d in screw_diff):
             raise self.gcode.error(
-                "bed level exceeds configured limits ({}mm)! " \
-                "Adjust screws and restart print.".format(self.max_diff))
+                """{"code":"key175", "msg": "bed level exceeds configured limits (%s mm)! Adjust screws and restart print.", "values": ["%s"]}""".format(self.max_diff, self.max_diff))
 
 def load_config(config):
     return ScrewsTiltAdjust(config)

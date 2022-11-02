@@ -65,7 +65,7 @@ def verify_no_manual_probe(printer):
         gcode.register_command('ACCEPT', 'dummy')
     except printer.config_error as e:
         raise gcode.error(
-            "Already in a manual Z probe. Use ABORT to abort it.")
+            """{"code":"key197", "msg": "Already in a manual Z probe. Use ABORT to abort it.", "values": []}""")
     gcode.register_command('ACCEPT', None)
 
 Z_BOB_MINIMUM = 0.500
@@ -123,7 +123,7 @@ class ManualProbeHelper:
         z_pos = kin_pos[2]
         if warn_no_change and z_pos == prev_pos:
             self.gcode.respond_info(
-                "WARNING: No change in position (reached stepper resolution)")
+                """{"code":"key256": "msg":"WARNING: No change in position (reached stepper resolution) ", "values":[]}""")
         # Find recent positions that were tested
         pp = self.past_positions
         next_pos = bisect.bisect_left(pp, z_pos)
@@ -135,6 +135,60 @@ class ManualProbeHelper:
             prev_str = "%.3f" % (pp[prev_pos],)
         if next_pos < len(pp):
             next_str = "%.3f" % (pp[next_pos],)
+        import json
+        z_offset = -1000
+        try:
+            path = "/mnt/UDISK/printer_config/printer.cfg"
+            import os
+            import yaml
+            # If it is in multi machine control mode, select the configuration file according to the currently selected USB port
+            if os.path.exists("/etc/init.d/klipper_service.2"):
+                try:
+                    with open("/mnt/UDISK/.crealityprint/multiprinter.yaml", 'r') as f:
+                        multi_printer_info = yaml.load(f.read(), Loader=yaml.Loader)
+                except:
+                    multi_printer_info = {}
+                current_printer = multi_printer_info.get("current_printer", {
+                    "printer_id": 1,
+                    "serial": "/dev/serial/by-id/usb_serial_1",
+                    "moonraker_port": 7125
+                })
+                str_printer_id = str(current_printer.get("printer_id"))
+                if str_printer_id == "1":
+                    pass
+                else:
+                    path = "/mnt/UDISK/printer_config" + str_printer_id + "/printer.cfg"
+
+            with open(path, "r") as f:
+                ret = f.readlines()
+                for obj in ret:
+                    if obj.startswith("#*# z_offset"):
+                        obj = obj.strip("\n")
+                        z_offset = float(obj.split(" ")[-1])
+        except Exception as err:
+            logging.error(err)
+        if z_offset != -1000:
+            if z_offset - z_pos < 0.0:
+                with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                    msg = {"z_offset_is_ok": False}
+                    f.write(json.dumps(msg))
+                    f.flush()
+            else:
+                with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                    msg = {"z_offset_is_ok": True}
+                    f.write(json.dumps(msg))
+                    f.flush()
+        else:
+            if 0 < z_pos:
+                with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                    msg = {"z_offset_is_ok": False}
+                    f.write(json.dumps(msg))
+                    f.flush()
+            else:
+                with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                    msg = {"z_offset_is_ok": True}
+                    f.write(json.dumps(msg))
+                    f.flush()
         # Find recent positions
         self.gcode.respond_info("Z position: %s --> %.3f <-- %s"
                                 % (prev_str, z_pos, next_str))
@@ -143,9 +197,8 @@ class ManualProbeHelper:
         pos = self.toolhead.get_position()
         start_pos = self.start_position
         if pos[:2] != start_pos[:2] or pos[2] >= start_pos[2]:
-            gcmd.respond_info(
-                "Manual probe failed! Use TESTZ commands to position the\n"
-                "nozzle prior to running ACCEPT.")
+            gcmd.error(
+                """{"code":"key257": "msg":"Manual probe failed! Use TESTZ commands to position the \nnozzle prior to running ACCEPT.", "values":[]}""")
             self.finalize(False)
             return
         self.finalize(True)

@@ -60,8 +60,8 @@ class SX1509(object):
             return SX1509_digital_out(self, pin_params)
         elif pin_type == 'pwm' and pin_params['pin'][0:4] == "PIN_":
             return SX1509_pwm(self, pin_params)
-        raise pins.error("Wrong pin or incompatible type: %s with type %s! " % (
-            pin_params['pin'][0:4], pin_type))
+        raise pins.error("""{"code":"key107", "msg": "Wrong pin or incompatible type: %s with type %s", "values": ["%s", "%s"]}""" % (
+            pin_params['pin'][0:4], pin_type, pin_params['pin'][0:4], pin_type))
     def get_mcu(self):
         return self._mcu
     def get_oid(self):
@@ -111,14 +111,14 @@ class SX1509_digital_out(object):
         self._sx1509.clear_bits_in_register(REG_DIR, self._bitmask)
     def _build_config(self):
         if self._max_duration:
-            raise pins.error("SX1509 pins are not suitable for heaters")
+            raise pins.error("""{"code":"key108", "msg": "SX1509 pins are not suitable for heaters", "values": []}""")
     def get_mcu(self):
         return self._mcu
     def setup_max_duration(self, max_duration):
         self._max_duration = max_duration
     def setup_start_value(self, start_value, shutdown_value, is_static=False):
         if is_static and start_value != shutdown_value:
-            raise pins.error("Static pin can not have shutdown value")
+            raise pins.error("""{"code":"key109", "msg": "Static pin can not have shutdown value", "values": []}""")
         self._start_value = (not not start_value) ^ self._invert
         self._shutdown_value = self._invert
         self._is_static = is_static
@@ -163,9 +163,9 @@ class SX1509_pwm(object):
         self._sx1509.clear_bits_in_register(REG_DATA, self._bitmask)
     def _build_config(self):
         if not self._hardware_pwm:
-            raise pins.error("SX1509_pwm must have hardware_pwm enabled")
+            raise pins.error("""{"code":"key110", "msg": "SX1509_pwm must have hardware_pwm enabled", "values": []}""")
         if self._max_duration:
-            raise pins.error("SX1509 pins are not suitable for heaters")
+            raise pins.error("""{"code":"key108", "msg": "SX1509 pins are not suitable for heaters", "values": []}""")
         # Send initial value
         self._sx1509.set_register(self._i_on_reg,
                                   ~int(255 * self._start_value) & 0xFF)

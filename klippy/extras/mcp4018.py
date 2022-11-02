@@ -26,8 +26,8 @@ class SoftwareI2C:
         sda_params = ppins.lookup_pin(config.get('sda_pin'))
         self.sda_oid = self.mcu.create_oid()
         if sda_params['chip'] != self.mcu:
-            raise ppins.error("%s: scl_pin and sda_pin must be on same mcu" % (
-                config.get_name(),))
+            raise ppins.error("""{"code":"key42", "msg":"Unable to parse 'position' in section '%s'", "values": ["%s"]}""" % (
+                config.get_name(), config.get_name()))
         self.mcu.add_config_cmd("config_digital_out oid=%d pin=%s"
                                 " value=%d default_value=%d max_duration=%d" % (
                                     self.sda_oid, sda_params['pin'], 1, 1, 0))

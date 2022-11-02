@@ -30,10 +30,10 @@ class ExtruderStepper:
         ename = gcmd.get('EXTRUDER')
         extruder = self.printer.lookup_object(ename, None)
         if extruder is None:
-            raise gcmd.error("'%s' is not a valid extruder." % (ename,))
+            raise gcmd.error("""{"code":"key162", "msg": "'%s' is not a valid extruder.", "values": ["%s"]}""" % (ename, ename))
         extruder.sync_stepper(self.stepper)
         self.extruder_name = ename
-        gcmd.respond_info("Extruder stepper now syncing with '%s'" % (ename,))
+        gcmd.respond_info("""{"code":"key163", "msg": "Extruder stepper now syncing with '%s'", "values": [%s]}""" % (ename, ename))
 
 def load_config_prefix(config):
     return ExtruderStepper(config)

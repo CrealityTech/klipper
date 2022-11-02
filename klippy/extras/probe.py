@@ -3,6 +3,7 @@
 # Copyright (C) 2017-2021  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import json
 import logging
 import pins
 from . import manual_probe
@@ -116,7 +117,7 @@ class PrinterProbe:
         toolhead = self.printer.lookup_object('toolhead')
         curtime = self.printer.get_reactor().monotonic()
         if 'z' not in toolhead.get_status(curtime)['homed_axes']:
-            raise self.printer.command_error("Must home before probe")
+            raise self.printer.command_error("""{"code":"key96", "msg": "Must home before probe", "values": []}""")
         phoming = self.printer.lookup_object('homing')
         pos = toolhead.get_position()
         pos[2] = self.z_position
@@ -128,7 +129,7 @@ class PrinterProbe:
                 reason += HINT_TIMEOUT
             raise self.printer.command_error(reason)
         self.gcode.respond_info("probe at %.3f,%.3f is z=%.6f"
-                                % (epos[0], epos[1], epos[2]))
+                                % (epos[0], epos[1], epos[2] - self.z_offset))
         return epos[:3]
     def _move(self, coord, speed):
         self.printer.lookup_object('toolhead').manual_move(coord, speed)
@@ -169,7 +170,7 @@ class PrinterProbe:
             z_positions = [p[2] for p in positions]
             if max(z_positions) - min(z_positions) > samples_tolerance:
                 if retries >= samples_retries:
-                    raise gcmd.error("Probe samples exceed samples_tolerance")
+                    raise gcmd.error("""{"code":"key97", "msg": "Probe samples exceed samples tolerance", "values": []}""")
                 gcmd.respond_info("Probe samples exceed tolerance. Retrying...")
                 retries += 1
                 positions = []
@@ -240,9 +241,41 @@ class PrinterProbe:
             "average %.6f, median %.6f, standard deviation %.6f" % (
             max_value, min_value, range_value, avg_value, median, sigma))
     def probe_calibrate_finalize(self, kin_pos):
+        if self.name == "bltouch" and self.z_offset - self.z_position < 0.0:
+            with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                msg = {"z_offset_is_ok": False}
+                f.write(json.dumps(msg))
+                f.flush()
+                # f.write('{"z_offset_is_ok": false}')
+            logging.error("++++++++++++++z_offset_is_ok error")
+        else:
+            with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                msg = {"z_offset_is_ok": True}
+                f.write(json.dumps(msg))
+                f.flush()
+                # f.write('{"z_offset_is_ok": true}')
         if kin_pos is None:
             return
         z_offset = self.probe_calibrate_z - kin_pos[2]
+        if z_offset < self.z_position or (self.name == "bltouch" and z_offset < 0.00):
+            # self.gcode._respond_error("PROBE_CALIBRAT error, old_z_offset=%s, kin_pos[2]=%s,"
+            #                           " new_z_offset=%s-%s, new_z_offset[%s] < min_z_position[%s]"
+            #                           % (
+            #                               self.probe_calibrate_z, kin_pos[2], self.probe_calibrate_z, kin_pos[2],
+            #                               z_offset,
+            #                               self.z_position))
+            with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                msg = {"z_offset_is_ok": False}
+                f.write(json.dumps(msg))
+                f.flush()
+                    # f.write('{"z_offset_is_ok": false}')
+            logging.error("++++++++++++++z_offset_is_ok error")
+        else:
+            with open("/mnt/UDISK/.crealityprint/z_offset.json", "w+") as f:
+                msg = {"z_offset_is_ok": True}
+                f.write(json.dumps(msg))
+                f.flush()
+                    # f.write('{"z_offset_is_ok": true}')
         self.gcode.respond_info(
             "%s: z_offset: %.3f\n"
             "The SAVE_CONFIG command will update the printer config file\n"
@@ -372,7 +405,7 @@ class ProbePointsHelper:
     def minimum_points(self,n):
         if len(self.probe_points) < n:
             raise self.printer.config_error(
-                "Need at least %d probe points for %s" % (n, self.name))
+                """{"code":"key98", "msg": "Need at least %d probe points for %s", "values": [%d, "%s"]}""" % (n, self.name))
     def update_probe_points(self, points, min_points):
         self.probe_points = points
         self.minimum_points(min_points)
@@ -418,8 +451,7 @@ class ProbePointsHelper:
         self.lift_speed = probe.get_lift_speed(gcmd)
         self.probe_offsets = probe.get_offsets()
         if self.horizontal_move_z < self.probe_offsets[2]:
-            raise gcmd.error("horizontal_move_z can't be less than"
-                             " probe's z_offset")
+            raise gcmd.error("""{"code": "key15", "msg": "horizontal_move_z can't be less than probe's z_offset"}""")
         probe.multi_probe_begin()
         while 1:
             done = self._move_next()

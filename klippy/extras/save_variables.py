@@ -27,7 +27,7 @@ class SaveVariables:
                 for name, val in varfile.items('Variables'):
                     allvars[name] = ast.literal_eval(val)
         except:
-            msg = "Unable to parse existing variable file"
+            msg = """{"code": "key284", "msg": ""Unable to parse existing variable file", "values": []}"""
             logging.exception(msg)
             raise self.printer.command_error(msg)
         self.allVariables = allvars
@@ -38,7 +38,7 @@ class SaveVariables:
         try:
             value = ast.literal_eval(value)
         except ValueError as e:
-            raise gcmd.error("Unable to parse '%s' as a literal" % (value,))
+            raise gcmd.error("""{"code": "key285", "msg": "Unable to parse '%s' as a literal", "values": ["%s"]}""" % (value, value))
         newvars = dict(self.allVariables)
         newvars[varname] = value
         # Write file
@@ -51,7 +51,7 @@ class SaveVariables:
             varfile.write(f)
             f.close()
         except:
-            msg = "Unable to save variable"
+            msg = """{"code": "key286", "msg": "Unable to save variable", "values": []}"""
             logging.exception(msg)
             raise gcmd.error(msg)
         gcmd.respond_info("Variable Saved")

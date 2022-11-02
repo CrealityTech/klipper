@@ -4,6 +4,9 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import os, re, logging, collections, shlex
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
 
 class CommandError(Exception):
     pass
@@ -58,26 +61,33 @@ class GCodeCommand:
         value = self._params.get(name)
         if value is None:
             if default is self.sentinel:
-                raise self.error("Error on '%s': missing %s"
-                                 % (self._commandline, name))
+                raise self.error("""{"code":"key251", "msg":"Error on '%s': missing %s", "values":["%s",%s"]}"""
+                                 % (self._commandline, name, self._commandline, name))
             return default
         try:
             value = parser(value)
         except:
-            raise self.error("Error on '%s': unable to parse %s"
-                             % (self._commandline, value))
+            raise self.error(
+                             """{"code":"key171", "msg": "Unable to parse '%s' as a  %s", "values": ["%s", "%s"]}""" % (self._commandline, value,
+                                                                                                                  self._commandline, value)
+                             )
         if minval is not None and value < minval:
-            raise self.error("Error on '%s': %s must have minimum of %s"
-                             % (self._commandline, name, minval))
+            if self._commandline == "z_offset" and name == "bltouch":
+                raise self.error("""{"code":"key281", "msg":"Error on 'z_offset': 'touch' must have minimum of %s", "values":["%s"]}""" % (
+                    minval, minval
+                ))
+            else:
+                raise self.error("""{"code":"key252","msg":"Error on '%s': %s must have minimum of %s","values":["%s","%s","%s"]}"""
+                             % (self._commandline, name, minval, self._commandline, name, minval))
         if maxval is not None and value > maxval:
-            raise self.error("Error on '%s': %s must have maximum of %s"
-                             % (self._commandline, name, maxval))
+            raise self.error("""{"code":"key253", "msg":"Error on '%s': %s must have maximumof %s", "values":["%s","%s","%s"]}"""
+                             % (self._commandline, name, maxval, self._commandline, name, maxval))
         if above is not None and value <= above:
-            raise self.error("Error on '%s': %s must be above %s"
-                             % (self._commandline, name, above))
+            raise self.error("""{"code":"key254", "msg":"Error on '%s': %s must be above %s", "values":["%s","%s","%s"]}"""
+                             % (self._commandline, name, above, self._commandline, name, above))
         if below is not None and value >= below:
-            raise self.error("Error on '%s': %s must be below %s"
-                             % (self._commandline, name, below))
+            raise self.error("""{"code":"key255", "msg":"Error on '%s': %s must be below %s", "values":["%s","%s","%s"]}"""
+                             % (self._commandline, name, below, self._commandline, name, below))
         return value
     def get_int(self, name, default=sentinel, minval=None, maxval=None):
         return self.get(name, default, parser=int, minval=minval, maxval=maxval)
@@ -130,7 +140,7 @@ class GCodeDispatch:
             return old_cmd
         if cmd in self.ready_gcode_handlers:
             raise self.printer.config_error(
-                "gcode command %s already registered" % (cmd,))
+                """{"code":"key57", "msg":"gcode command %s already registered", "values": ["%s"]}""" % (cmd, cmd))
         if not self.is_traditional_gcode(cmd):
             origfunc = func
             func = lambda params: origfunc(self._get_extended_params(params))
@@ -148,12 +158,12 @@ class GCodeDispatch:
         prev_key, prev_values = prev
         if prev_key != key:
             raise self.printer.config_error(
-                "mux command %s %s %s may have only one key (%s)" % (
-                    cmd, key, value, prev_key))
+                """{"code":"key58", "msg":"mux command %s %s %s may have only one key (%s)", "values": ["%s", "%s", "%s", "%s"]}""" % (
+                    cmd, key, value, prev_key, cmd, key, value, prev_key))
         if value in prev_values:
             raise self.printer.config_error(
-                "mux command %s %s %s already registered (%s)" % (
-                    cmd, key, value, prev_values))
+                """{"code":"key59", "msg":"mux command %s %s %s already registered (%s)", "values": ["%s", "%s", "%s", "%s"]}""" % (
+                    cmd, key, value, prev_values, cmd, key, value, prev_values))
         prev_values[value] = func
     def get_command_help(self):
         return dict(self.gcode_help)
@@ -203,7 +213,7 @@ class GCodeDispatch:
                 if not need_ack:
                     raise
             except:
-                msg = 'Internal error on command:"%s"' % (cmd,)
+                msg = """{"code":"key60", "msg":"Internal error on command:%s", "values": ["%s"]}""" % (cmd, cmd)
                 logging.exception(msg)
                 self.printer.invoke_shutdown(msg)
                 self._respond_error(msg)
@@ -233,7 +243,12 @@ class GCodeDispatch:
         lines = msg.strip().split('\n')
         if len(lines) > 1:
             self.respond_info("\n".join(lines), log=False)
-        self.respond_raw('!! %s' % (lines[0].strip(),))
+        if "{" in lines[0].strip():
+            self.respond_raw('!! %s' % ('\n'.join(lines)))
+            # pass
+        else:
+            self.respond_raw('!! %s' % (lines[0].strip(),))
+
         if self.is_fileinput:
             self.printer.request_exit('error_exit')
     def _respond_state(self, state):
@@ -290,7 +305,7 @@ class GCodeDispatch:
                 not gcmd.get_float('S', 1.) or self.is_fileinput)):
             # Don't warn about requests to turn off fan when fan not present
             return
-        gcmd.respond_info('Unknown command:"%s"' % (cmd,))
+        gcmd.respond_info("""{"code":"key61, "msg":"Unknown command:%s", "values": ["%s"]}""" % (cmd, cmd))
     def _cmd_mux(self, command, gcmd):
         key, values = self.mux_commands[command]
         if None in values:
@@ -298,8 +313,8 @@ class GCodeDispatch:
         else:
             key_param = gcmd.get(key)
         if key_param not in values:
-            raise gcmd.error("The value '%s' is not valid for %s"
-                             % (key_param, key))
+            raise gcmd.error("""{"code":"key69", "msg": "The value '%s' is not valid for %s", "values": ["%s", "%s"]}"""
+                             % (key_param, key, key_param, key))
         values[key_param](gcmd)
     # Low-level G-Code commands that are needed before the config file is loaded
     def cmd_M110(self, gcmd):
@@ -307,7 +322,7 @@ class GCodeDispatch:
         pass
     def cmd_M112(self, gcmd):
         # Emergency Stop
-        self.printer.invoke_shutdown("Shutdown due to M112 command")
+        self.printer.invoke_shutdown("""{"code":"key70", "msg": "Shutdown due to M112 command", "values": []}""")
     def cmd_M115(self, gcmd):
         # Get Firmware Version and Capabilities
         software_version = self.printer.get_start_args().get('software_version')
@@ -346,12 +361,14 @@ class GCodeDispatch:
     def cmd_HELP(self, gcmd):
         cmdhelp = []
         if not self.is_printer_ready:
-            cmdhelp.append("Printer is not ready - not all commands available.")
+            cmdhelp.append("""{"code":"key72", "msg": "Printer is not ready - not all commands available.\n""")
         cmdhelp.append("Available extended commands:")
+        cmdtmp = []
         for cmd in sorted(self.gcode_handlers):
             if cmd in self.gcode_help:
                 cmdhelp.append("%-10s: %s" % (cmd, self.gcode_help[cmd]))
-        gcmd.respond_info("\n".join(cmdhelp), log=False)
+                cmdtmp.append("%-10s: %s" % (cmd, self.gcode_help[cmd]))
+        gcmd.respond_info("\n".join(cmdhelp) + '"values":["' + ",".join(cmdtmp) + '"]', log=False)
 
 # Support reading gcode from a pseudo-tty interface
 class GCodeIO:
@@ -444,6 +461,7 @@ class GCodeIO:
     def _respond_raw(self, msg):
         if self.pipe_is_active:
             try:
+                logging.error("++++++++++++++msg:%s" % msg)
                 os.write(self.fd, (msg+"\n").encode())
             except os.error:
                 logging.exception("Write g-code response")

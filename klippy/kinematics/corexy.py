@@ -80,7 +80,7 @@ class CoreXYKinematics:
         if (xpos < limits[0][0] or xpos > limits[0][1]
             or ypos < limits[1][0] or ypos > limits[1][1]):
             self._check_endstops(move)
-        if not move.axes_d[2]:
+        if not round(move.axes_d[2], 1):
             # Normal XY move - use defaults
             return
         # Move with Z - update velocity and accel for slower Z axis

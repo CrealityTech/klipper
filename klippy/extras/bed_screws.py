@@ -27,7 +27,7 @@ class BedScrews:
                 fine_coord = config.getfloatlist(pfa, count=2)
                 fine_adjust.append((fine_coord, screw_name))
         if len(screws) < 3:
-            raise config.error("bed_screws: Must have at least three screws")
+            raise config.error("""{"code":"key100", "msg": "bed_screws: Must have at least three screws", "values": []}""")
         self.number_of_screws = len(screws)
         self.states = {'adjust': screws, 'fine': fine_adjust}
         self.speed = config.getfloat('speed', 50., above=0.)
@@ -67,7 +67,7 @@ class BedScrews:
     cmd_BED_SCREWS_ADJUST_help = "Tool to help adjust bed leveling screws"
     def cmd_BED_SCREWS_ADJUST(self, gcmd):
         if self.state is not None:
-            raise gcmd.error("Already in bed_screws helper; use ABORT to exit")
+            raise gcmd.error("""{"code":"key101", "msg": "Already in bed_screws helper; use ABORT to exit", "values": []}""")
         # reset accepted screws
         self.accepted_screws = 0
         self.move((None, None, self.horizontal_move_z), self.speed)

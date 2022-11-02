@@ -34,6 +34,7 @@ class SerialReader:
         # Sent message notification tracking
         self.last_notify_id = 0
         self.pending_notifications = {}
+
     def _bg_thread(self):
         response = self.ffi_main.new('struct pull_queue_message *')
         while 1:
@@ -172,6 +173,7 @@ class SerialReader:
             ret = self._start_session(serial_dev)
             if ret:
                 break
+
     def connect_uart(self, serialport, baud, rts=True):
         # Initial connection
         logging.info("%sStarting serial connect", self.warn_prefix)

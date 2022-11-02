@@ -10,11 +10,7 @@ import gcode, configfile, pins, mcu, toolhead, webhooks
 
 message_ready = "Printer is ready"
 
-message_startup = """
-Printer is not ready
-The klippy host software is attempting to connect.  Please
-retry in a few moments.
-"""
+message_startup = """{"code":"key3", "msg":"Printer is not ready The klippy host software is attempting to connect.  Please retry in a few moments."}"""
 
 message_restart = """
 Once the underlying issue is corrected, use the "RESTART"
@@ -35,17 +31,20 @@ Protocol error connecting to printer
 
 message_mcu_connect_error = """
 Once the underlying issue is corrected, use the
-"FIRMWARE_RESTART" command to reset the firmware, reload the
+FIRMWARE_RESTART command to reset the firmware, reload the
 config, and restart the host software.
 Error configuring printer
 """
 
 message_shutdown = """
 Once the underlying issue is corrected, use the
-"FIRMWARE_RESTART" command to reset the firmware, reload the
+FIRMWARE_RESTART command to reset the firmware, reload the
 config, and restart the host software.
 Printer is shutdown
 """
+
+api_server_index = None
+MULTI_PRINTER_PATH = "/mnt/UDISK/.crealityprint/multiprinter.yaml"
 
 class Printer:
     config_error = configfile.error
@@ -88,13 +87,13 @@ class Printer:
     def add_object(self, name, obj):
         if name in self.objects:
             raise self.config_error(
-                "Printer object '%s' already created" % (name,))
+                """{"code":"key123", "msg": "Printer object '%s' already created", "values": ["%s"]}""" % (name, name))
         self.objects[name] = obj
     def lookup_object(self, name, default=configfile.sentinel):
         if name in self.objects:
             return self.objects[name]
         if default is configfile.sentinel:
-            raise self.config_error("Unknown config object '%s'" % (name,))
+            raise self.config_error("""{"code":"key122", "msg": "Unknown config object '%s'", "values": ["%s"]}""" % (name, name))
         return default
     def lookup_objects(self, module=None):
         if module is None:
@@ -117,7 +116,7 @@ class Printer:
         if not os.path.exists(py_name) and not os.path.exists(py_dirname):
             if default is not configfile.sentinel:
                 return default
-            raise self.config_error("Unable to load module '%s'" % (section,))
+            raise self.config_error("""{"code":"key124", "msg": "Unable to load module '%s'", "values": ["%s"]}""" % (section, section))
         mod = importlib.import_module('extras.' + module_name)
         init_func = 'load_config'
         if len(module_parts) > 1:
@@ -161,8 +160,38 @@ class Printer:
                     return
                 cb()
         except (self.config_error, pins.error) as e:
+            # logging.exception("Config error")^M
+            logging.error(e)
+            # self._set_state("%s\n%s" % (str(e), message_restart))^M
+            if '{"code":' in str(e):
+                try:
+                    import json
+                    tmp_state = eval(str(e))
+                    tmp_state["msg"] = tmp_state["msg"] + "\n" + message_restart
+                    self._set_state(json.dumps(tmp_state))
+                except Exception as e:
+                    logging.exception(e)
+                    self._set_state("%s\n%s" % (str(e), message_restart))
+            else:
+                if "File contains no section headers." in str(e):
+                    value = str(e)
+                    value = value.replace("File contains no section headers.", "").replace("'*\n'", "'*\\n'")
+
+                    msg = """{"code": "key336", "msg": "File contains no section headers.<br/>%s", "values":["%s"]}""" % (
+                        value, value
+                    )
+                    self._set_state(msg)
+                elif "File contains parsing errors:" in str(e):
+                    value = str(e)
+                    value = value.replace("File contains parsing errors:", "").replace("'*\n'", "'*\\n'")
+
+                    msg = """{"code": "key337", "msg": "File contains parsing errors:%s<br/>%s", "values":["%s"]}""" % (
+                        value, message_restart, value
+                    )
+                    self._set_state(msg)
+                else:
+                    self._set_state("%s\n%s" % (str(e), message_restart))
             logging.exception("Config error")
-            self._set_state("%s\n%s" % (str(e), message_restart))
             return
         except msgproto.error as e:
             logging.exception("Protocol error")
@@ -173,7 +202,11 @@ class Printer:
             return
         except mcu.error as e:
             logging.exception("MCU error during connect")
-            self._set_state("%s%s" % (str(e), message_mcu_connect_error))
+            if '"msg"' in str(e):
+                json_msg = str(e)
+            else:
+                json_msg = '{"code":"key0", "msg":"%s%s"}' % (str(e), message_mcu_connect_error)
+            self._set_state(json_msg)
             util.dump_mcu_build()
             return
         except Exception as e:
@@ -183,6 +216,8 @@ class Printer:
             return
         try:
             self._set_state(message_ready)
+            logging.info("+++++++++++++++printer_ready")
+
             for cb in self.event_handlers.get("klippy:ready", []):
                 if self.state_message is not message_ready:
                     return
@@ -226,12 +261,50 @@ class Printer:
             logging.info(info)
         if self.bglogger is not None:
             self.bglogger.set_rollover_info(name, info)
+
+    def get_yaml_info(self, _config_file=None):
+        """
+        read yaml file info
+        """
+        import yaml
+        # if not _config_file:
+        if not os.path.exists(_config_file):
+            return {}
+        config_data = {}
+        try:
+            with open(_config_file, 'r') as f:
+                config_data = yaml.load(f.read(), Loader=yaml.Loader)
+        except Exception as err:
+            pass
+        return config_data
+
+    def set_yaml_info(self, _config_file=None, data=None):
+        """
+        write yaml file info
+        """
+        import yaml
+        if not _config_file:
+            return
+        try:
+            with open(_config_file, 'w+') as f:
+                yaml.dump(data, f, allow_unicode=True)
+                f.flush()
+            os.system("sync")
+        except Exception as e:
+            pass
+
+
     def invoke_shutdown(self, msg):
         if self.in_shutdown_state:
             return
+        logging.info("+++++++++++++++invoke_shutdown")
         logging.error("Transition to shutdown state: %s", msg)
         self.in_shutdown_state = True
-        self._set_state("%s%s" % (msg, message_shutdown))
+        if "{" in msg:
+            result = msg
+        else:
+            result = '{"code":"key1", "msg":"%s%s"}' % (msg, message_shutdown.replace("\n","<br/>"))
+        self._set_state(result)
         for cb in self.event_handlers.get("klippy:shutdown", []):
             try:
                 cb()
@@ -281,6 +354,14 @@ def arg_dictionary(option, opt_str, value, parser):
     parser.values.dictionary[key] = fname
 
 def main():
+    # printer_cfg_obj = "/mnt/UDISK/printer_config/printer.cfg"
+    # if not os.path.exists(printer_cfg_obj) or os.path.getsize(printer_cfg_obj) == 0:
+    #     raise
+    #     os.system("/bin/cp /usr/share/klipper-brain/printer_config/printer.cfg %s && sync" % printer_cfg_obj)
+    # timelapse_cfg_obj = "/mnt/UDISK/printer_config/timelapse.cfg"
+    # if not os.path.exists(timelapse_cfg_obj):
+    #     os.system("/bin/cp /usr/share/klipper-brain/printer_config/timelapse.cfg %s && sync" % timelapse_cfg_obj)
+
     usage = "%prog [options] <config file>"
     opts = optparse.OptionParser(usage)
     opts.add_option("-i", "--debuginput", dest="debuginput",
@@ -302,6 +383,21 @@ def main():
     opts.add_option("--import-test", action="store_true",
                     help="perform an import module test")
     options, args = opts.parse_args()
+    if options.apiserver:
+        index = options.apiserver[-1]
+        global api_server_index
+        if index == "2" or index == "3" or index == "4":
+            api_server_index = index
+            timelapse_cfg_obj = "/mnt/UDISK/printer_config" + index + "/timelapse.cfg"
+        else:
+            api_server_index = "1"
+            timelapse_cfg_obj = "/mnt/UDISK/printer_config/timelapse.cfg"
+        if not os.path.exists(timelapse_cfg_obj):
+            os.system("/bin/cp /usr/share/klipper-brain/printer_config/timelapse.cfg %s && sync" % timelapse_cfg_obj)
+
+        with open("/mnt/UDISK/.crealityprint/printer%s_stat" % api_server_index, "w+") as f:
+            logging.info("/mnt/UDISK/.crealityprint/printer%s_stat set init invoke_shutdown status" % api_server_index)
+            f.write("0")
     if options.import_test:
         import_test()
     if len(args) != 1:
@@ -309,7 +405,7 @@ def main():
     start_args = {'config_file': args[0], 'apiserver': options.apiserver,
                   'start_reason': 'startup'}
 
-    debuglevel = logging.INFO
+    debuglevel = logging.ERROR
     if options.verbose:
         debuglevel = logging.DEBUG
     if options.debuginput:
@@ -326,7 +422,7 @@ def main():
         start_args['log_file'] = options.logfile
         bglogger = queuelogger.setup_bg_logging(options.logfile, debuglevel)
     else:
-        logging.basicConfig(level=debuglevel)
+        logging.basicConfig(level=debuglevel, format='[%(levelname)s] %(asctime)s [%(name)s] [%(module)s:%(funcName)s:%(lineno)d] %(message)s')
     logging.info("Starting Klippy...")
     start_args['software_version'] = util.get_git_version()
     start_args['cpu_info'] = util.get_cpu_info()

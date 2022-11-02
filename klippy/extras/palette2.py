@@ -49,8 +49,7 @@ class Palette2:
                 config, "virtual_sdcard")
         except config.error:
             raise self.printer.config_error(
-                "Palette 2 requires [virtual_sdcard] to work,"
-                " please add it to your config!")
+                """{"code":"key199", "msg": "Palette 2 requires [virtual_sdcard] to work, please add it to your config!", "values": []}""")
         try:
             self.pause_resume = self.printer.load_object(
                 config, "pause_resume")
@@ -77,7 +76,7 @@ class Palette2:
         self.serial = None
         self.serial_port = config.get("serial")
         if not self.serial_port:
-            raise config.error("Invalid serial port specific for Palette 2")
+            raise config.error("""{"code":"key199", "msg": "Invalid serial port specific for Palette 2", "values": []}""")
         self.baud = config.getint("baud", default=115200)
         self.feedrate_splice = config.getfloat(
             "feedrate_splice", default=0.8, minval=0., maxval=1.)
@@ -142,7 +141,7 @@ class Palette2:
     def cmd_Connect(self, gcmd):
         if self.serial:
             gcmd.respond_info(
-                "Palette 2 serial port is already active, disconnect first")
+                """{"code":"key200", "msg": "Palette 2 serial port is already active, disconnect first", "values": []}""")
             return
 
         self.signal_disconnect = False
@@ -152,7 +151,7 @@ class Palette2:
             self.serial = serial.Serial(
                 self.serial_port, self.baud, timeout=0, write_timeout=0)
         except SerialException:
-            gcmd.respond_info("Unable to connect to the Palette 2")
+            gcmd.respond_info("""{"code":"key201", "msg": "Unable to connect to the Palette 2", "values": []}""")
             return
 
         with self.write_queue.mutex:
@@ -175,7 +174,7 @@ class Palette2:
     cmd_Disconnect_Help = ("Disconnect from the Palette 2")
 
     def cmd_Disconnect(self, gmcd=None):
-        self.gcode.respond_info("Disconnecting from Palette 2")
+        self.gcode.respond_info("""{"code":"key202", "msg": "Disconnecting from Palette 2", "values": []}""")
         if self.serial:
             self.serial.close()
             self.serial = None
@@ -209,7 +208,7 @@ class Palette2:
         if self._check_P2(gcmd):
             if not self.is_loading:
                 gcmd.respond_info(
-                    "Cannot auto load when the Palette 2 is not ready")
+                    """{"code":"key203", "msg": "Cannot auto load when the Palette 2 is not ready", "values": []}""")
                 return
             self.p2cmd_O102(params=None)
 
@@ -229,7 +228,7 @@ class Palette2:
         if self.heartbeat < (currTs - SETUP_TIMEOUT):
             self.signal_disconnect = True
             raise self.printer.command_error(
-                "No response from Palette 2")
+                """{"code":"key204", "msg": "No response from Palette 2", "values": []}""")
 
     cmd_O1_help = (
         "Initialize the print, and check connection with the Palette 2")
@@ -305,12 +304,12 @@ class Palette2:
             param_drive = gcmd.get_commandline()[5:6]
             param_distance = gcmd.get_commandline()[8:]
         except IndexError:
-            gmcd.respond_info(
-                "Incorrect number of arguments for splice command")
+            gcmd.respond_info(
+                """{"code":"key206", "msg": "Incorrect number of arguments for splice command" "values": []}""")
         try:
             self.omega_splices.append((int(param_drive), param_distance))
         except ValueError:
-            gcmd.respond_info("Incorrectly formatted splice command")
+            gcmd.respond_info("""{"code":"key207", "msg": "Incorrectly formatted splice command" "values": []}""")
         logging.debug("Omega splice command drive %s distance %s" %
                       (param_drive, param_distance))
 
@@ -407,8 +406,7 @@ class Palette2:
 
             if fw < "9.0.9":
                 raise self.printer.command_error(
-                    "Palette 2 firmware version is too old, "
-                    "update to at least 9.0.9")
+                    """{"code":"key208", "msg": "Palette 2 firmware version is too old, update to at least 9.0.9" "values": []}""")
         else:
             self.files = [
                 file for (
@@ -495,7 +493,7 @@ class Palette2:
         if not toolhead.get_extruder().get_heater().can_extrude:
             self.write_queue.put(COMMAND_SMART_LOAD_STOP)
             self.gcode.respond_info(
-                "Unable to auto load filament, extruder is below minimum temp")
+                """{"code":"key210", "msg": "Unable to auto load filament, extruder is below minimum temp" "values": []}""")
             return
 
         if self.smart_load_timer is None:

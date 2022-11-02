@@ -21,10 +21,13 @@ class QueueHandler(logging.Handler):
             self.handleError(record)
 
 # Class to poll a queue in a background thread and log each message
-class QueueListener(logging.handlers.TimedRotatingFileHandler):
+# class QueueListener(logging.handlers.TimedRotatingFileHandler):
+class QueueListener(logging.handlers.RotatingFileHandler):
     def __init__(self, filename):
-        logging.handlers.TimedRotatingFileHandler.__init__(
-            self, filename, when='midnight', backupCount=5)
+        # logging.handlers.TimedRotatingFileHandler.__init__(
+        #     self, filename, when='midnight', backupCount=5)
+        logging.handlers.RotatingFileHandler.__init__(self, filename, mode='a',
+                                                      maxBytes=20 * 1024 * 1024, backupCount=5, encoding='utf-8')
         self.bg_queue = queue.Queue()
         self.bg_thread = threading.Thread(target=self._bg_thread)
         self.bg_thread.start()
@@ -46,7 +49,8 @@ class QueueListener(logging.handlers.TimedRotatingFileHandler):
     def clear_rollover_info(self):
         self.rollover_info.clear()
     def doRollover(self):
-        logging.handlers.TimedRotatingFileHandler.doRollover(self)
+        # logging.handlers.TimedRotatingFileHandler.doRollover(self)
+        logging.handlers.RotatingFileHandler.doRollover(self)
         lines = [self.rollover_info[name]
                  for name in sorted(self.rollover_info)]
         lines.append(
@@ -61,9 +65,13 @@ def setup_bg_logging(filename, debuglevel):
     global MainQueueHandler
     ql = QueueListener(filename)
     MainQueueHandler = QueueHandler(ql.bg_queue)
+    formatter = logging.Formatter(
+        '[%(levelname)s] %(asctime)s [%(name)s] [%(module)s:%(funcName)s:%(lineno)d] %(message)s')
+    MainQueueHandler.setFormatter(formatter)
     root = logging.getLogger()
     root.addHandler(MainQueueHandler)
     root.setLevel(debuglevel)
+    ql.setFormatter(formatter)
     return ql
 
 def clear_bg_logging():

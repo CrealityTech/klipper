@@ -134,7 +134,7 @@ class BLTouchEndstopWrapper:
                 break
             if retry >= 2:
                 raise self.printer.command_error(
-                    "BLTouch failed to raise probe")
+                    '{"code": "key8", "msg": "BLTouch failed to raise probe"}')
             msg = "Failed to verify BLTouch probe is raised; retrying."
             self.gcode.respond_info(msg)
             self.sync_mcu_print_time()
@@ -208,7 +208,7 @@ class BLTouchEndstopWrapper:
             self.verify_raise_probe()
         self.sync_print_time()
         if hmove.check_no_movement() is not None:
-            raise self.printer.command_error("BLTouch failed to deploy")
+            raise self.printer.command_error("""{"code":"key194", "msg": "BLTouch failed to deploy.", "values": []}""")
     def get_position_endstop(self):
         return self.position_endstop
     def set_output_mode(self, mode):
@@ -252,8 +252,8 @@ class BLTouchEndstopWrapper:
     def cmd_BLTOUCH_DEBUG(self, gcmd):
         cmd = gcmd.get('COMMAND', None)
         if cmd is None or cmd not in Commands:
-            gcmd.respond_info("BLTouch commands: %s" % (
-                ", ".join(sorted([c for c in Commands if c is not None]))))
+            gcmd.respond_info("""{"code":"key218", "msg": "BLTouch commands: %s.", "values": ["%s"]}""" % (
+                ", ".join(sorted([c for c in Commands if c is not None])), ", ".join(sorted([c for c in Commands if c is not None]))))
             return
         gcmd.respond_info("Sending BLTOUCH_DEBUG COMMAND=%s" % (cmd,))
         self.sync_print_time()

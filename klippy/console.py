@@ -226,7 +226,7 @@ def main():
     debuglevel = logging.INFO
     if options.verbose:
         debuglevel = logging.DEBUG
-    logging.basicConfig(level=debuglevel)
+    logging.basicConfig(level=debuglevel, format='[%(levelname)s] %(asctime)s [%(name)s] [%(module)s:%(funcName)s:%(lineno)d] %(message)s')
 
     r = reactor.Reactor()
     kbd = KeyboardReader(r, serialport, baud, options.canbus_iface,

@@ -116,27 +116,59 @@ MAX31856_FAULT_OPEN        = 0x01
 MAX31856_SCALE = 5
 MAX31856_MULT = 0.0078125
 
+message_shutdown = """
+Once the underlying issue is corrected, use the
+FIRMWARE_RESTART command to reset the firmware, reload the
+config, and restart the host software.
+Printer is shutdown
+"""
+
 class MAX31856(SensorBase):
     def __init__(self, config):
         SensorBase.__init__(self, config, "MAX31856",
                             self.build_spi_init(config))
     def calc_temp(self, adc, fault):
+
         if fault & MAX31856_FAULT_CJRANGE:
-            self.fault("Max31856: Cold Junction Range Fault")
+            msg = "Max31856: Cold Junction Range Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key316", "msg": "%s", "values":[]}""" % msg
+            # self.fault("Max31856: Cold Junction Range Fault")
+            self.fault(json_msg_str)
         if fault & MAX31856_FAULT_TCRANGE:
-            self.fault("Max31856: Thermocouple Range Fault")
+            msg = "Max31856: Thermocouple Range Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key317", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31856: Thermocouple Range Fault")
         if fault & MAX31856_FAULT_CJHIGH:
-            self.fault("Max31856: Cold Junction High Fault")
+            msg = "Max31856: Cold Junction High Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key318", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31856: Cold Junction High Fault")
         if fault & MAX31856_FAULT_CJLOW:
-            self.fault("Max31856: Cold Junction Low Fault")
+            msg = "Max31856: Cold Junction Low Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key319", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31856: Cold Junction Low Fault")
         if fault & MAX31856_FAULT_TCHIGH:
-            self.fault("Max31856: Thermocouple High Fault")
+            msg = "Max31856: Thermocouple High Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key320", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31856: Thermocouple High Fault")
         if fault & MAX31856_FAULT_TCLOW:
-            self.fault("Max31856: Thermocouple Low Fault")
+            msg = "Max31856: Thermocouple Low Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key321", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31856: Thermocouple Low Fault")
         if fault & MAX31856_FAULT_OVUV:
-            self.fault("Max31856: Over/Under Voltage Fault")
+            msg = "Max31856: Over/Under Voltage Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key322", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31856: Over/Under Voltage Fault")
         if fault & MAX31856_FAULT_OPEN:
-            self.fault("Max31856: Thermocouple Open Fault")
+            msg = "Max31856: Thermocouple Open Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key323", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31856: Thermocouple Open Fault")
         adc = adc >> MAX31856_SCALE
         # Fix sign bit:
         if adc & 0x40000:
@@ -194,11 +226,20 @@ class MAX31855(SensorBase):
         SensorBase.__init__(self, config, "MAX31855", spi_mode=0)
     def calc_temp(self, adc, fault):
         if adc & 0x1:
-            self.fault("MAX31855 : Open Circuit")
+            msg = "MAX31855 : Open Circuit" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key324", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("MAX31855 : Open Circuit")
         if adc & 0x2:
-            self.fault("MAX31855 : Short to GND")
+            msg = "MAX31855 : Short to GND" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key325", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("MAX31855 : Short to GND")
         if adc & 0x4:
-            self.fault("MAX31855 : Short to Vcc")
+            msg = "MAX31855 : Short to Vcc" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key326", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("MAX31855 : Short to Vcc")
         adc = adc >> MAX31855_SCALE
         # Fix sign bit:
         if adc & 0x2000:
@@ -223,9 +264,15 @@ class MAX6675(SensorBase):
         SensorBase.__init__(self, config, "MAX6675", spi_mode=0)
     def calc_temp(self, adc, fault):
         if adc & 0x02:
-            self.fault("Max6675 : Device ID error")
+            msg = "Max6675 : Device ID error" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key327", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max6675 : Device ID error")
         if adc & 0x04:
-            self.fault("Max6675 : Thermocouple Open Fault")
+            msg = "Max6675 : Thermocouple Open Fault" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key328", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max6675 : Thermocouple Open Fault")
         adc = adc >> MAX6675_SCALE
         # Fix sign bit:
         if adc & 0x2000:
@@ -281,20 +328,41 @@ class MAX31865(SensorBase):
                             self.build_spi_init(config))
     def calc_temp(self, adc, fault):
         if fault & 0x80:
-            self.fault("Max31865 RTD input is disconnected")
+            msg = "Max31865 RTD input is disconnected" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key329", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31865 RTD input is disconnected")
         if fault & 0x40:
-            self.fault("Max31865 RTD input is shorted")
+            msg = "Max31865 RTD input is shorted" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key330", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31865 RTD input is shorted")
         if fault & 0x20:
-            self.fault(
-                "Max31865 VREF- is greater than 0.85 * VBIAS, FORCE- open")
+            msg = "Max31865 VREF- is greater than 0.85 * VBIAS, FORCE- open" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key331", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault(
+            #     "Max31865 VREF- is greater than 0.85 * VBIAS, FORCE- open")
         if fault & 0x10:
-            self.fault("Max31865 VREF- is less than 0.85 * VBIAS, FORCE- open")
+            msg = "Max31865 VREF- is less than 0.85 * VBIAS, FORCE- open" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key332", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31865 VREF- is less than 0.85 * VBIAS, FORCE- open")
         if fault & 0x08:
-            self.fault("Max31865 VRTD- is less than 0.85 * VBIAS, FORCE- open")
+            msg = "Max31865 VRTD- is less than 0.85 * VBIAS, FORCE- open" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key333", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31865 VRTD- is less than 0.85 * VBIAS, FORCE- open")
         if fault & 0x04:
-            self.fault("Max31865 Overvoltage or undervoltage fault")
+            msg = "Max31865 VRTD- is less than 0.85 * VBIAS, FORCE- open" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key333", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31865 Overvoltage or undervoltage fault")
         if fault & 0x03:
-            self.fault("Max31865 Unspecified error")
+            msg = "Max31865 Unspecified error" + "\n" + message_shutdown
+            json_msg_str = """{"code": "key334", "msg": "%s", "values":[]}""" % msg
+            self.fault(json_msg_str)
+            # self.fault("Max31865 Unspecified error")
         adc = adc >> 1 # remove fault bit
         R_div_nominal = adc * self.adc_to_resist_div_nominal
         # Resistance (relative to rtd_nominal_r) is calculated using:

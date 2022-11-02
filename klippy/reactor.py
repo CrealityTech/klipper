@@ -288,6 +288,7 @@ class PollReactor(SelectReactor):
         SelectReactor.__init__(self, gc_checking)
         self._poll = select.poll()
         self._fds = {}
+
     # File descriptors
     def register_fd(self, fd, callback):
         file_handler = ReactorFileHandler(fd, callback)
@@ -301,6 +302,7 @@ class PollReactor(SelectReactor):
         fds = self._fds.copy()
         del fds[file_handler.fd]
         self._fds = fds
+
     # Main loop
     def _dispatch_loop(self):
         self._g_dispatch = g_dispatch = greenlet.getcurrent()

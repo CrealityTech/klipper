@@ -134,17 +134,17 @@ class GCodeMove:
             if 'F' in params:
                 gcode_speed = float(params['F'])
                 if gcode_speed <= 0.:
-                    raise gcmd.error("Invalid speed in '%s'"
-                                     % (gcmd.get_commandline(),))
+                    raise gcmd.error("""{"code":"key272": "msg":"Invalid speed in '%s'", "values":["%s"]}"""
+                                     % (gcmd.get_commandline(),gcmd.get_commandline()))
                 self.speed = gcode_speed * self.speed_factor
         except ValueError as e:
-            raise gcmd.error("Unable to parse move '%s'"
-                             % (gcmd.get_commandline(),))
+            raise gcmd.error("""{"code":"key273": "msg":"Unable to parse move '%s'", "values":["%s"]}"""
+                             % (gcmd.get_commandline(),gcmd.get_commandline()))
         self.move_with_transform(self.last_position, self.speed)
     # G-Code coordinate manipulation
     def cmd_G20(self, gcmd):
         # Set units to inches
-        raise gcmd.error('Machine does not support G20 (inches) command')
+        raise gcmd.error("""{"code":"key132", "msg": "Machine does not support G20 (inches) command", "values": []}""")
     def cmd_G21(self, gcmd):
         # Set units to millimeters
         pass
@@ -223,7 +223,7 @@ class GCodeMove:
         state_name = gcmd.get('NAME', 'default')
         state = self.saved_states.get(state_name)
         if state is None:
-            raise gcmd.error("Unknown g-code state: %s" % (state_name,))
+            raise gcmd.error("""{"code":"key274", "msg": "Unknown g-code state: %s", "values":["%s"]}""" % (state_name, state_name))
         # Restore state
         self.absolute_coord = state['absolute_coord']
         self.absolute_extrude = state['absolute_extrude']
@@ -245,7 +245,7 @@ class GCodeMove:
     def cmd_GET_POSITION(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead', None)
         if toolhead is None:
-            raise gcmd.error("Printer not ready")
+            raise gcmd.error("""{"code": "key283", "msg": ""Printer not ready"}""")
         kin = toolhead.get_kinematics()
         steppers = kin.get_steppers()
         mcu_pos = " ".join(["%s:%d" % (s.get_name(), s.get_mcu_position())

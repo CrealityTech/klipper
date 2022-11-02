@@ -12,7 +12,7 @@ class mcp4451:
         self.i2c = bus.MCU_I2C_from_config(config)
         i2c_addr = self.i2c.get_i2c_address()
         if i2c_addr < 44 or i2c_addr > 47:
-            raise config.error("mcp4451 address must be between 44 and 47")
+            raise config.error("""{"code":"key199", "msg": "mcp4451 address must be between 44 and 47", "values": []}""")
         scale = config.getfloat('scale', 1., above=0.)
         # Configure registers
         self.set_register(0x04, 0xff)

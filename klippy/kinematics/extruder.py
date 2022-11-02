@@ -112,15 +112,19 @@ class PrinterExtruder:
         axis_r = move.axes_r[3]
         if not self.heater.can_extrude:
             raise self.printer.command_error(
-                "Extrude below minimum temp\n"
-                "See the 'min_extrude_temp' config option for details")
+                """{"code":"key111", "msg": "Extrude below minimum temp\nSee the 'min_extrude_temp' config option for details", "values": []}"""
+            )
         if (not move.axes_d[0] and not move.axes_d[1]) or axis_r < 0.:
             # Extrude only move (or retraction move) - limit accel and velocity
             if abs(move.axes_d[3]) > self.max_e_dist:
+                # raise self.printer.command_error(
+                #     "Extrude only move too long (%.3fmm vs %.3fmm)\n"
+                #     "See the 'max_extrude_only_distance' config"
+                #     " option for details" % (move.axes_d[3], self.max_e_dist))
                 raise self.printer.command_error(
-                    "Extrude only move too long (%.3fmm vs %.3fmm)\n"
-                    "See the 'max_extrude_only_distance' config"
-                    " option for details" % (move.axes_d[3], self.max_e_dist))
+                    """{"code":"key244": "msg":"Extrude only move too long (%.3fmm vs %.3fmm)\nSee the 'max_extrude_only_distance' config option for details", "values":[%.3f, %.3f]}""" % (
+                        move.axes_d[3], self.max_e_dist, move.axes_d[3], self.max_e_dist)
+                    )
             inv_extrude_r = 1. / abs(axis_r)
             move.limit_speed(self.max_e_velocity * inv_extrude_r,
                              self.max_e_accel * inv_extrude_r)
@@ -132,9 +136,8 @@ class PrinterExtruder:
             logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
                           axis_r, self.max_extrude_ratio, area, move.move_d)
             raise self.printer.command_error(
-                "Move exceeds maximum extrusion (%.3fmm^2 vs %.3fmm^2)\n"
-                "See the 'max_extrude_cross_section' config option for details"
-                % (area, self.max_extrude_ratio * self.filament_area))
+                """{"code":"key112", "msg": "Move exceeds maximum extrusion (%.3fmm^2 vs %.3fmm^2)\nSee the 'max_extrude_cross_section' config option for details", "values": [%.3f, %.3f]}"""
+                % (area, self.max_extrude_ratio * self.filament_area, area, self.max_extrude_ratio * self.filament_area))
     def calc_junction(self, prev_move, move):
         diff_r = move.axes_r[3] - prev_move.axes_r[3]
         if diff_r:
@@ -169,7 +172,7 @@ class PrinterExtruder:
             if extruder is None:
                 if temp <= 0.:
                     return
-                raise gcmd.error("Extruder not configured")
+                raise gcmd.error("""{"code":"key113", "msg": "Extruder not configured", "values": []}""")
         else:
             extruder = self.printer.lookup_object('toolhead').get_extruder()
         pheaters = self.printer.lookup_object('heaters')
@@ -232,9 +235,9 @@ class DummyExtruder:
     def get_name(self):
         return ""
     def get_heater(self):
-        raise self.printer.command_error("Extruder not configured")
+        raise self.printer.command_error("""{"code":"key113", "msg": "Extruder not configured", "values": []}""")
     def get_trapq(self):
-        raise self.printer.command_error("Extruder not configured")
+        raise self.printer.command_error("""{"code":"key113", "msg": "Extruder not configured", "values": []}""")
 
 def add_printer_objects(config):
     printer = config.get_printer()

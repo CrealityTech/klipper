@@ -25,7 +25,7 @@ class ArcSupport:
     def cmd_G2(self, gcmd):
         gcodestatus = self.gcode_move.get_status()
         if not gcodestatus['absolute_coordinates']:
-            raise gcmd.error("G2/G3 does not support relative move mode")
+            raise gcmd.error('{"code": "key10", "msg": "G2/G3 does not support relative move mode"}')
         currentPos = gcodestatus['gcode_position']
 
         # Parse parameters
@@ -33,11 +33,11 @@ class ArcSupport:
         asY = gcmd.get_float("Y", currentPos[1])
         asZ = gcmd.get_float("Z", currentPos[2])
         if gcmd.get_float("R", None) is not None:
-            raise gcmd.error("G2/G3 does not support R moves")
+            raise gcmd.error('{"code": "key11", "msg": "G2/G3 does not support R moves"}')
         asI = gcmd.get_float("I", 0.)
         asJ = gcmd.get_float("J", 0.)
         if not asI and not asJ:
-            raise gcmd.error("G2/G3 neither I nor J given")
+            raise gcmd.error('{"code": "key12", "msg": "G2/G3 neither I nor J given"}')
         asE = gcmd.get_float("E", None)
         asF = gcmd.get_float("F", None)
         clockwise = (gcmd.get_command() == 'G2')

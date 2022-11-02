@@ -21,8 +21,7 @@ class SafeZHoming:
         self.gcode.register_command("G28", self.cmd_G28)
 
         if config.has_section("homing_override"):
-            raise config.error("homing_override and safe_z_homing cannot"
-                               +" be used simultaneously")
+            raise config.error("""{"code":"key106", "msg": "homing_override and safe_z_homing cannot be used simultaneously", "values": []}""")
 
     def cmd_G28(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')

@@ -81,17 +81,29 @@ insert_timer(struct timer *pos, struct timer *t, uint32_t waketime)
     prev->next = t;
 }
 
-// Schedule a function call at a supplied time.
+
 void
-sched_add_timer(struct timer *add)
+sched_add_timer_step(struct timer *add)
 {
+    static uint32_t stepclosenum=0 ;
     uint32_t waketime = add->waketime;
     irqstatus_t flag = irq_save();
     struct timer *tl = SchedStatus.timer_list;
-    if (unlikely(timer_is_before(waketime, tl->waketime))) {
+     if (unlikely(timer_is_before(waketime, tl->waketime))) {
         // This timer is before all other scheduled timers
-        if (timer_is_before(waketime, timer_read_time()))
-            try_shutdown("Timer too close");
+        if (timer_is_before(waketime, timer_read_time())){
+            if(stepclosenum<1000){
+                add->waketime=timer_read_time() + timer_from_us(1);
+                stepclosenum += 1;
+                waketime = add->waketime;
+                sendf("wxlstepidl waketime=%u  ", waketime);
+            }
+            else{
+                stepclosenum = 0;
+                sendf("wxlstepsend waketime=%u  ", waketime);
+                try_shutdown("Timer too close");
+            }
+        }
         if (tl == &deleted_timer)
             add->next = deleted_timer.next;
         else
@@ -101,6 +113,46 @@ sched_add_timer(struct timer *add)
         SchedStatus.timer_list = &deleted_timer;
         timer_kick();
     } else {
+        stepclosenum = 0;
+        sendf("wxlstepinsert waketime=%u  ", waketime);
+        insert_timer(tl, add, waketime);
+    }
+    irq_restore(flag);
+}
+// Schedule a function call at a supplied time.
+void
+sched_add_timer(struct timer *add)
+{
+    static uint32_t closenum=0 ;
+    uint32_t waketime = add->waketime;
+    irqstatus_t flag = irq_save();
+    struct timer *tl = SchedStatus.timer_list;
+     if (unlikely(timer_is_before(waketime, tl->waketime))) {
+        // This timer is before all other scheduled timers
+        if (timer_is_before(waketime, timer_read_time())){
+            if(closenum<5000){
+                add->waketime=timer_read_time() + timer_from_us(1);
+                closenum += 1;
+                waketime = add->waketime;
+                sendf("wxlshutdown waketime=%u  ", waketime);
+            }
+            else{
+                closenum = 0;
+                sendf("wxlsshutdown5 waketime=%u  ", waketime);
+                try_shutdown("Timer too close");
+            }
+        }
+        if (tl == &deleted_timer)
+            add->next = deleted_timer.next;
+        else
+            add->next = tl;
+        deleted_timer.waketime = waketime;
+        deleted_timer.next = add;
+        SchedStatus.timer_list = &deleted_timer;
+        timer_kick();
+    } else {
+        closenum = 0;
+        sendf("wxlinsert_timer1 waketime=%u  ", waketime);
         insert_timer(tl, add, waketime);
     }
     irq_restore(flag);

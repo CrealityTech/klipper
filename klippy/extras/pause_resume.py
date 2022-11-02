@@ -60,7 +60,7 @@ class PauseResume:
     cmd_PAUSE_help = ("Pauses the current print")
     def cmd_PAUSE(self, gcmd):
         if self.is_paused:
-            gcmd.respond_info("Print already paused")
+            gcmd.respond_info("""{"code":"key211", "msg": "Print already paused", "values": []}""")
             return
         self.send_pause_command()
         self.gcode.run_script_from_command("SAVE_GCODE_STATE STATE=PAUSE_STATE")
@@ -76,7 +76,7 @@ class PauseResume:
     cmd_RESUME_help = ("Resumes the print from a pause")
     def cmd_RESUME(self, gcmd):
         if not self.is_paused:
-            gcmd.respond_info("Print is not paused, resume aborted")
+            gcmd.respond_info("""{"code": "key16", "msg": "Print is not paused, resume aborted"}""")
             return
         velocity = gcmd.get_float('VELOCITY', self.recover_velocity)
         self.gcode.run_script_from_command(
