@@ -124,6 +124,8 @@ class BedMesh:
         # Register transform
         gcode_move = self.printer.load_object(config, 'gcode_move')
         gcode_move.set_move_transform(self)
+        # initialize status dict
+        self.update_status()
     def handle_connect(self):
         self.toolhead = self.printer.lookup_object('toolhead')
         self.bmc.print_generated_points(logging.info)
@@ -159,9 +161,10 @@ class BedMesh:
         # cache the current position before a transform takes place
         gcode_move = self.printer.lookup_object('gcode_move')
         gcode_move.reset_last_position()
+        self.update_status()
     def get_z_factor(self, z_pos):
         if z_pos >= self.fade_end:
-            return 0.
+            return 0.0
         elif z_pos >= self.fade_start:
             return (self.fade_end - z_pos) / self.fade_dist
         else:
@@ -213,12 +216,15 @@ class BedMesh:
                         """{"code":"key235", "msg":"Mesh Leveling: Error splitting move ", "values": []}""")
         self.last_position[:] = newpos
     def get_status(self, eventtime=None):
-        status = {
+        return self.status
+    def update_status(self):
+        self.status = {
             "profile_name": "",
             "mesh_min": (0., 0.),
             "mesh_max": (0., 0.),
             "probed_matrix": [[]],
-            "mesh_matrix": [[]]
+            "mesh_matrix": [[]],
+            "profiles": self.pmgr.get_profiles()
         }
         if self.z_mesh is not None:
             params = self.z_mesh.get_mesh_params()
@@ -226,12 +232,11 @@ class BedMesh:
             mesh_max = (params['max_x'], params['max_y'])
             probed_matrix = self.z_mesh.get_probed_matrix()
             mesh_matrix = self.z_mesh.get_mesh_matrix()
-            status['profile_name'] = self.pmgr.get_current_profile()
-            status['mesh_min'] = mesh_min
-            status['mesh_max'] = mesh_max
-            status['probed_matrix'] = probed_matrix
-            status['mesh_matrix'] = mesh_matrix
-        return status
+            self.status['profile_name'] = self.pmgr.get_current_profile()
+            self.status['mesh_min'] = mesh_min
+            self.status['mesh_max'] = mesh_max
+            self.status['probed_matrix'] = probed_matrix
+            self.status['mesh_matrix'] = mesh_matrix
     def get_mesh(self):
         return self.z_mesh
     cmd_BED_MESH_OUTPUT_help = "Retrieve interpolated grid of probed z-points"
@@ -592,6 +597,8 @@ class BedMeshCalibrate:
     cmd_BED_MESH_CALIBRATE_help = "Perform Mesh Bed Leveling"
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
         self._profile_name = gcmd.get('PROFILE', "default")
+        if not self._profile_name.strip():
+            raise gcmd.error("Value for parameter 'PROFILE' must be specified")
         self.bedmesh.set_mesh(None)
         self.update_config(gcmd)
         self.probe_helper.start_probe(gcmd)
@@ -702,7 +709,7 @@ class BedMeshCalibrate:
                     ("""{"code":"key50", "msg":"bed_mesh: invalid x-axis table length\nProbed table length: %d Probed Table:\n%s", "values": [%d, "%s"]}""") %
                     (len(probed_matrix), str(probed_matrix), len(probed_matrix), str(probed_matrix)))
 
-        z_mesh = ZMesh(params)
+        z_mesh = ZMesh(params,self.printer)
         try:
             z_mesh.build_mesh(probed_matrix)
         except BedMeshError as e:
@@ -794,7 +801,9 @@ class MoveSplitter:
 
 
 class ZMesh:
-    def __init__(self, params):
+    def __init__(self, params,printer):
+        self.printer = printer
+        self.isenable = True
         self.probed_matrix = self.mesh_matrix = None
         self.mesh_params = params
         self.avg_z = 0.
@@ -832,6 +841,15 @@ class ZMesh:
                            (self.mesh_x_count - 1)
         self.mesh_y_dist = (self.mesh_y_max - self.mesh_y_min) / \
                            (self.mesh_y_count - 1)
+        self.gcode = self.printer.lookup_object('gcode')
+        if "BED_MESH_SET_DISABLE" not in self.gcode.ready_gcode_handlers:
+            self.gcode.register_command(
+                'BED_MESH_SET_DISABLE', self.cmd_BED_MESH_SET_DISABLE,
+                desc=self.cmd_BED_MESH_SET_DISABLE_helper)
+        if "BED_MESH_SET_ENABLE" not in self.gcode.ready_gcode_handlers:
+            self.gcode.register_command(
+                'BED_MESH_SET_ENABLE', self.cmd_BED_MESH_SET_ENABLE,
+                desc=self.cmd_BED_MESH_SET_ENABLE_helper)
     def get_mesh_matrix(self):
         if self.mesh_matrix is not None:
             return [[round(z, 6) for z in line]
@@ -893,17 +911,26 @@ class ZMesh:
         return self.mesh_x_min + self.mesh_x_dist * index
     def get_y_coordinate(self, index):
         return self.mesh_y_min + self.mesh_y_dist * index
+
+    def cmd_BED_MESH_SET_DISABLE(self, gcmd):
+        self.isenable = False
+    cmd_BED_MESH_SET_DISABLE_helper = " set  MESH disable"
+    def cmd_BED_MESH_SET_ENABLE(self, gcmd):
+        self.isenable = True
+    cmd_BED_MESH_SET_ENABLE_helper = "set  MESH enable "
     def calc_z(self, x, y):
-        if self.mesh_matrix is not None:
-            tbl = self.mesh_matrix
-            tx, xidx = self._get_linear_index(x + self.mesh_offsets[0], 0)
-            ty, yidx = self._get_linear_index(y + self.mesh_offsets[1], 1)
-            z0 = lerp(tx, tbl[yidx][xidx], tbl[yidx][xidx+1])
-            z1 = lerp(tx, tbl[yidx+1][xidx], tbl[yidx+1][xidx+1])
-            return lerp(ty, z0, z1)
-        else:
-            # No mesh table generated, no z-adjustment
-            return 0.
+        if self.isenable:
+            if self.mesh_matrix is not None:
+                tbl = self.mesh_matrix
+                tx, xidx = self._get_linear_index(x + self.mesh_offsets[0], 0)
+                ty, yidx = self._get_linear_index(y + self.mesh_offsets[1], 1)
+                z0 = lerp(tx, tbl[yidx][xidx], tbl[yidx][xidx+1])
+                z1 = lerp(tx, tbl[yidx+1][xidx], tbl[yidx+1][xidx+1])
+                return lerp(ty, z0, z1)
+            else:
+                pass
+                # No mesh table generated, no z-adjustment
+        return 0.
     def get_z_range(self):
         if self.mesh_matrix is not None:
             mesh_min = min([min(x) for x in self.mesh_matrix])
@@ -1126,6 +1153,8 @@ class ProfileManager:
         self._check_incompatible_profiles()
         if "default" in self.profiles:
             self.load_profile("default")
+    def get_profiles(self):
+        return self.profiles
     def get_current_profile(self):
         return self.current_profile
     def _check_incompatible_profiles(self):
@@ -1162,10 +1191,14 @@ class ProfileManager:
         for key, value in mesh_params.items():
             configfile.set(cfg_name, key, value)
         # save copy in local storage
-        self.profiles[prof_name] = profile = {}
+        # ensure any self.profiles returned as status remains immutable
+        profiles = dict(self.profiles)
+        profiles[prof_name] = profile = {}
         profile['points'] = probed_matrix
         profile['mesh_params'] = collections.OrderedDict(mesh_params)
+        self.profiles = profiles
         self.current_profile = prof_name
+        self.bedmesh.update_status()
         self.gcode.respond_info(
             "Bed Mesh state has been saved to profile [%s]\n"
             "for the current session.  The SAVE_CONFIG command will\n"
@@ -1178,7 +1211,7 @@ class ProfileManager:
                 """{"code":"key52", "msg":"bed_mesh: Unknown profile [%s]", "values": ["%s"]}""" % (prof_name, prof_name))
         probed_matrix = profile['points']
         mesh_params = profile['mesh_params']
-        z_mesh = ZMesh(mesh_params)
+        z_mesh = ZMesh(mesh_params,self.printer)
         try:
             z_mesh.build_mesh(probed_matrix)
         except BedMeshError as e:
@@ -1189,7 +1222,10 @@ class ProfileManager:
         if prof_name in self.profiles:
             configfile = self.printer.lookup_object('configfile')
             configfile.remove_section('bed_mesh ' + prof_name)
-            del self.profiles[prof_name]
+            profiles = dict(self.profiles)
+            del profiles[prof_name]
+            self.profiles = profiles
+            self.bedmesh.update_status()
             self.gcode.respond_info(
                 "Profile [%s] removed from storage for this session.\n"
                 "The SAVE_CONFIG command will update the printer\n"
@@ -1207,6 +1243,10 @@ class ProfileManager:
         for key in options:
             name = gcmd.get(key, None)
             if name is not None:
+                if not name.strip():
+                    raise gcmd.error(
+                        "Value for parameter '%s' must be specified" % (key)
+                    )
                 if name == "default" and key == 'SAVE':
                     gcmd.respond_info(
                         "Profile 'default' is reserved, please choose"

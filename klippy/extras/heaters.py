@@ -96,8 +96,8 @@ class Heater:
     def set_temp(self, degrees):
         if degrees and (degrees < self.min_temp or degrees > self.max_temp):
             raise self.printer.command_error(
-                """{"code":"key19", "msg":"Requested temperature (%.1f) out of range (%.1f:%.1f)", "values": ["%.1f", "%.1f", "%.1f"]}"""
-                % (degrees, self.min_temp, self.max_temp, degrees, self.min_temp, self.max_temp))
+                "Requested temperature (%.1f) out of range (%.1f:%.1f)"
+                % (degrees, self.min_temp, self.max_temp))
         with self.lock:
             self.target_temp = degrees
     def get_temp(self, eventtime):
@@ -241,6 +241,19 @@ class PrinterHeaters:
         gcode.register_command("M105", self.cmd_M105, when_not_ready=True)
         gcode.register_command("TEMPERATURE_WAIT", self.cmd_TEMPERATURE_WAIT,
                                desc=self.cmd_TEMPERATURE_WAIT_help)
+        # Register webhooks
+        webhooks = self.printer.lookup_object('webhooks')
+        webhooks.register_endpoint("breakheater", self._handle_breakheater)
+        self.can_break=False
+    def _handle_breakheater(self,web_request):
+        reactor = self.printer.get_reactor()
+        for heater in self.heaters.values():
+            eventtime = reactor.monotonic()
+            if heater.check_busy(eventtime):
+                self.can_break = True
+            else:
+                pass
+
     def load_config(self, config):
         self.have_load_sensors = True
         # Load default temperature sensors
@@ -250,7 +263,7 @@ class PrinterHeaters:
         try:
             dconfig = pconfig.read_config(filename)
         except Exception:
-            raise config.config_error("""{"code":"key33", "msg":"Cannot load config '%s'", "values": ["%s"]}""" % (filename, filename))
+            raise config.config_error("Cannot load config '%s'" % (filename,))
         for c in dconfig.get_prefix_sections(''):
             self.printer.load_object(dconfig, c.get_name())
     def add_sensor_factory(self, sensor_type, sensor_factory):
@@ -258,7 +271,7 @@ class PrinterHeaters:
     def setup_heater(self, config, gcode_id=None):
         heater_name = config.get_name().split()[-1]
         if heater_name in self.heaters:
-            raise config.error("""{"code":"key34", "msg":"Heater %s already registered", "values": ["%s"]}""" % (heater_name, heater_name))
+            raise config.error("Heater %s already registered" % (heater_name,))
         # Setup sensor
         sensor = self.setup_sensor(config)
         # Create heater
@@ -279,7 +292,7 @@ class PrinterHeaters:
         sensor_type = config.get('sensor_type')
         if sensor_type not in self.sensor_factories:
             raise self.printer.config_error(
-                """{"code":"key35", "msg":"Unknown temperature sensor '%s'", "values": ["%s"]}""" % (sensor_type, sensor_type))
+                "Unknown temperature sensor '%s'" % (sensor_type,))
         if sensor_type == 'NTC 100K beta 3950':
             config.deprecate('sensor_type', 'NTC 100K beta 3950')
         return self.sensor_factories[sensor_type](config)
@@ -291,7 +304,7 @@ class PrinterHeaters:
                 return
         if gcode_id in self.gcode_id_to_sensor:
             raise self.printer.config_error(
-                """{"code":"key36", "msg":"G-Code sensor id %s already registered", "values": ["%s"]}""" % (gcode_id,gcode_id))
+                "G-Code sensor id %s already registered" % (gcode_id,))
         self.gcode_id_to_sensor[gcode_id] = psensor
     def get_status(self, eventtime):
         return {'available_heaters': self.available_heaters,
@@ -330,7 +343,14 @@ class PrinterHeaters:
         gcode = self.printer.lookup_object("gcode")
         reactor = self.printer.get_reactor()
         eventtime = reactor.monotonic()
-        while not self.printer.is_shutdown() and heater.check_busy(eventtime):
+        while not self.printer.is_shutdown() and heater.check_busy(eventtime) :
+            if self.can_break:
+                self.can_break = False
+                # toolhead._handle_shutdown()
+                # toolhead.move_queue.reset()
+                # self.turn_off_all_heaters()
+                # gcode.run_script("G28")
+                break
             print_time = toolhead.get_last_move_time()
             gcode.respond_raw(self._get_temp(eventtime))
             eventtime = reactor.pause(eventtime + 1.)
@@ -344,12 +364,12 @@ class PrinterHeaters:
     def cmd_TEMPERATURE_WAIT(self, gcmd):
         sensor_name = gcmd.get('SENSOR')
         if sensor_name not in self.available_sensors:
-            raise gcmd.error("""{"code":"key39", "msg":"Unknown sensor '%s'", "values": [%s]}""" % (sensor_name,sensor_name))
+            raise gcmd.error("Unknown sensor '%s'" % (sensor_name,))
         min_temp = gcmd.get_float('MINIMUM', float('-inf'))
         max_temp = gcmd.get_float('MAXIMUM', float('inf'), above=min_temp)
         if min_temp == float('-inf') and max_temp == float('inf'):
             raise gcmd.error(
-                """{"code":"key38", "msg":"Error on 'TEMPERATURE_WAIT': missing MINIMUM or MAXIMUM.", "values": []}""")
+                "Error on 'TEMPERATURE_WAIT': missing MINIMUM or MAXIMUM.")
         if self.printer.get_start_args().get('debugoutput') is not None:
             return
         if sensor_name in self.heaters:
@@ -359,7 +379,7 @@ class PrinterHeaters:
         toolhead = self.printer.lookup_object("toolhead")
         reactor = self.printer.get_reactor()
         eventtime = reactor.monotonic()
-        while not self.printer.is_shutdown():
+        while not self.printer.is_shutdown() and not self.can_break:
             temp, target = sensor.get_temp(eventtime)
             if temp >= min_temp and temp <= max_temp:
                 return

@@ -22,7 +22,7 @@ class IdleTimeout:
         self.gcode = self.printer.lookup_object('gcode')
         self.toolhead = self.timeout_timer = None
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
-        self.idle_timeout = config.getfloat('timeout', 600., above=0.)
+        self.idle_timeout = config.getfloat('timeout', 3600., above=0.)
         self.is_valid = config.getboolean('is_valid', True)
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.idle_gcode = gcode_macro.load_template(config, 'gcode',

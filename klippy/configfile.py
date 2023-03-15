@@ -153,6 +153,9 @@ class PrinterConfig:
         gcode = self.printer.lookup_object('gcode')
         gcode.register_command("SAVE_CONFIG", self.cmd_SAVE_CONFIG,
                                desc=self.cmd_SAVE_CONFIG_help)
+        gcode.register_command("REMOVE_MCU_RPI_CONFIG", self.cmd_remove_mcu_rpi_CONFIG,
+                               desc=self.cmd_remove_mcu_rpi_CONFIG_help)
+
     def get_printer(self):
         return self.printer
     def _read_config_file(self, filename):
@@ -358,8 +361,78 @@ class PrinterConfig:
                     msg = ("SAVE_CONFIG section '%s' option '%s' conflicts "
                            "with included value" % (section, option))
                     raise gcode.error(msg)
+
+    def disable_mcu_rpi(self, cfg_path):
+        import configparser
+        cp = configparser.ConfigParser()
+        cp.read(cfg_path)
+        # try:
+        #     cp.read(cfg_path, encoding="utf8")
+        # except Exception as e:
+        #     cp.read(cfg_path, encoding="gbk")
+        sections = cp.sections()
+        rpi_enable = False
+        adxl345_enable = False
+        if "mcu rpi" in sections:
+            rpi_enable = True
+        if "adxl345" in sections:
+            adxl345_enable = True
+        resonance_tester_enable = False
+        if "resonance_tester" in sections:
+            resonance_tester_enable = True
+        if not rpi_enable:
+            return
+        lines = []
+        with open(cfg_path) as f:
+            lines = f.readlines()
+            for index, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                if line.startswith("#"):
+                    continue
+                if "z_offset" in line:
+                    continue
+                if not rpi_enable:
+                    if "[mcu rpi" in line:
+                        rpi_enable = True
+                else:
+                    if "[adxl345" in line:
+                        adxl345_enable = True
+                    else:
+                        if "[resonance_tester" in line:
+                            resonance_tester_enable = True
+                        else:
+                            if "[" in line:
+                                rpi_enable = False
+                                adxl345_enable = False
+                                resonance_tester_enable = False
+                                continue
+                if rpi_enable or adxl345_enable or resonance_tester_enable:
+                    if line.strip() and not line.startswith("#*#"):
+                        new_line = "#" + line
+                        lines[index] = new_line
+
+        with open(cfg_path, "w+") as f:
+            f.writelines(lines)
+
+    cmd_remove_mcu_rpi_CONFIG_help = "Remove mcu_rpi config"
+    def cmd_remove_mcu_rpi_CONFIG(self, gcmd):
+        self.remove_section("mcu rpi")
+        self.remove_section("adxl345")
+        self.remove_section("resonance_tester")
+        cfgname = self.printer.get_start_args()['config_file']
+        self.disable_mcu_rpi(cfgname)
+        # config = ConfigParser.ConfigParser()
+        # config.read(cfgname)
+        # config.remove_section("mcu rpi")
+        # config.remove_section("adxl345")
+        # config.remove_section("resonance_tester")
+        # config.write(open(cfgname, 'w'))
+
+
     cmd_SAVE_CONFIG_help = "Overwrite config file and restart"
     def cmd_SAVE_CONFIG(self, gcmd):
+        # self.cmd_remove_mcu_rpi_CONFIG(gcmd)
         if not self.autosave.fileconfig.sections():
             return
         gcode = self.printer.lookup_object('gcode')

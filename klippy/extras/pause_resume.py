@@ -17,6 +17,8 @@ class PauseResume:
                                             self.handle_connect)
         self.gcode.register_command("PAUSE", self.cmd_PAUSE,
                                     desc=self.cmd_PAUSE_help)
+        self.gcode.register_command("M600", self.cmd_M600,
+                                    desc=self.cmd_M600_help)
         self.gcode.register_command("RESUME", self.cmd_RESUME,
                                     desc=self.cmd_RESUME_help)
         self.gcode.register_command("CLEAR_PAUSE", self.cmd_CLEAR_PAUSE,
@@ -68,6 +70,7 @@ class PauseResume:
     def send_resume_command(self):
         if self.sd_paused:
             # Printing from virtual sd, run pause command
+            self.v_sd.do_resume_status = True
             self.v_sd.do_resume()
             self.sd_paused = False
         else:
@@ -84,6 +87,28 @@ class PauseResume:
             % (velocity))
         self.send_resume_command()
         self.is_paused = False
+    cmd_M600_help = ("M600 Pauses the current print")
+    def cmd_M600(self, gcmd):
+        x = gcmd.get_float("X", 0.)
+        y = gcmd.get_float("Y", 0.)
+        z = gcmd.get_float("Z", 10.)
+        e = gcmd.get_float("E", -20.)
+        if self.is_paused:
+            gcmd.respond_info("""{"code":"key211", "msg": "Print already paused", "values": []}""")
+            return
+        self.send_pause_command()
+        self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=M600_state\n")
+        self.gcode.run_script_from_command("SAVE_GCODE_STATE STATE=PAUSE_STATE")
+        self.gcode.run_script_from_command(
+                                            "G91\n"
+                                            "G1 E-5 F4000\n"
+                                            "G1 Z%s\n"
+                                            "G90\n"
+                                            "G1 X%s Y%s F3000\n"
+                                            "G0 E10 F6000\n"
+                                            "G0 E%s F6000\n"
+                                            "G92 E0" % (z, x, y, e))
+        self.is_paused = True
     cmd_CLEAR_PAUSE_help = (
         "Clears the current paused state without resuming the print")
     def cmd_CLEAR_PAUSE(self, gcmd):
@@ -95,6 +120,7 @@ class PauseResume:
         else:
             gcmd.respond_info("action:cancel")
         self.cmd_CLEAR_PAUSE(gcmd)
+        self.v_sd.cancel_print_state = False
 
 def load_config(config):
     return PauseResume(config)

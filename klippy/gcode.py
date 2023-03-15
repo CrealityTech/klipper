@@ -223,6 +223,9 @@ class GCodeDispatch:
     def run_script_from_command(self, script):
         self._process_commands(script.split('\n'), need_ack=False)
     def run_script(self, script):
+        if script == "CANCEL_PRINT":
+            virtual_sdcard = self.printer.lookup_object('virtual_sdcard', None)
+            virtual_sdcard.cancel_print_state = True
         with self.mutex:
             self._process_commands(script.split('\n'), need_ack=False)
     def get_mutex(self):
@@ -393,6 +396,7 @@ class GCodeIO:
         self.pending_commands = []
         self.bytes_read = 0
         self.input_log = collections.deque([], 50)
+
     def _handle_ready(self):
         self.is_printer_ready = True
         if self.is_fileinput and self.fd_handle is None:
@@ -461,7 +465,7 @@ class GCodeIO:
     def _respond_raw(self, msg):
         if self.pipe_is_active:
             try:
-                logging.error("++++++++++++++msg:%s" % msg)
+                logging.info("++++++++++++++msg:%s" % msg)
                 os.write(self.fd, (msg+"\n").encode())
             except os.error:
                 logging.exception("Write g-code response")

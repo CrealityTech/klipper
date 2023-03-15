@@ -903,6 +903,43 @@ class MCU:
             or (self._is_shutdown and not force)):
             return
         self._emergency_stop_cmd.send()
+        self.usb_reset()
+
+    def usb_reset(self):
+        usb_id = self._serialport
+        from subprocess import check_output
+        dev_bus_hub = "/dev/bus/usb/001/"
+        dev_bus_usb4 = "/dev/bus/usb/004/"
+        if usb_id == "/dev/serial/by-id/usb_serial_1":
+            dev_bus_pre = dev_bus_hub
+            dev_check_shell = "cat /sys/devices/platform/soc/5200000.ehci1-controller/usb1/1-1/1-1.3/devnum"
+            check_dev_model_shell = "cat /mnt/UDISK/printer_config/printer.cfg |grep '# !'"
+        elif usb_id == "/dev/serial/by-id/usb_serial_2":
+            dev_bus_pre = dev_bus_hub
+            dev_check_shell = "cat /sys/devices/platform/soc/5200000.ehci1-controller/usb1/1-1/1-1.1/devnum"
+            check_dev_model_shell = "cat /mnt/UDISK/printer_config2/printer.cfg |grep '# !'"
+        elif usb_id == "/dev/serial/by-id/usb_serial_3":
+            dev_bus_pre = dev_bus_hub
+            dev_check_shell = "cat /sys/devices/platform/soc/5200000.ehci1-controller/usb1/1-1/1-1.2/devnum"
+            check_dev_model_shell = "cat /mnt/UDISK/printer_config3/printer.cfg |grep '# !'"
+        elif usb_id == "/dev/serial/by-id/usb_serial_4":
+            dev_bus_pre = dev_bus_usb4
+            dev_check_shell = "cat /sys/devices/platform/soc/5101000.ohci0-controller/usb4/4-1/devnum"
+            check_dev_model_shell = "cat /mnt/UDISK/printer_config4/printer.cfg |grep '# !'"
+        else:
+            return
+        logging.error(check_dev_model_shell)
+        ret = check_output(check_dev_model_shell, shell=True)
+        logging.error(ret.strip().decode('utf-8'))
+        if "# !CR-10 V3" in ret.strip().decode('utf-8'):
+            logging.error(dev_check_shell)
+            ret = check_output(dev_check_shell, shell=True)
+            number = int(ret.strip().decode('utf-8'))
+            usb_rest_shell = "usb_rest %s%03d" % (dev_bus_pre, number)
+            logging.error(usb_rest_shell)
+            check_output(usb_rest_shell, shell=True)
+            import time
+            time.sleep(0.5)
     def _restart_arduino(self):
         logging.info("Attempting MCU '%s' reset", self._name)
         self._disconnect()

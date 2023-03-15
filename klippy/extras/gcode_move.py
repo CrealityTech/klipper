@@ -3,6 +3,7 @@
 # Copyright (C) 2016-2021  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import json
 import logging
 
 class GCodeMove:
@@ -23,10 +24,11 @@ class GCodeMove:
         self.is_printer_ready = False
         # Register g-code commands
         gcode = printer.lookup_object('gcode')
+        self.gcode = gcode
         handlers = [
             'G1', 'G20', 'G21',
             'M82', 'M83', 'G90', 'G91', 'G92', 'M220', 'M221',
-            'SET_GCODE_OFFSET', 'SAVE_GCODE_STATE', 'RESTORE_GCODE_STATE',
+            'SET_GCODE_OFFSET', 'SAVE_GCODE_STATE', 'RESTORE_GCODE_STATE', 'SWAP_RESUME'
         ]
         for cmd in handlers:
             func = getattr(self, 'cmd_' + cmd)
@@ -113,6 +115,7 @@ class GCodeMove:
     def cmd_G1(self, gcmd):
         # Move
         params = gcmd.get_command_parameters()
+        #gcode_G1_cmd = gcmd.get_commandline()
         try:
             for pos, axis in enumerate('XYZ'):
                 if axis in params:
@@ -206,6 +209,148 @@ class GCodeMove:
             for pos, delta in enumerate(move_delta):
                 self.last_position[pos] += delta
             self.move_with_transform(self.last_position, speed)
+
+    def cmd_SWAP_RESUME(self, gcmd):
+        state = self.saved_states.get("M600_state")
+        if state is None:
+            self.gcode.run_script_from_command("RESUME")
+        else:
+            self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=M600_state\n"
+                                               "RESUME")
+
+    def recordPrintFileName(self, path, file_name, fan_state="", filament_used=0, last_print_duration=0):
+        import json, os
+        fan = ""
+        old_filament_used = 0
+        old_last_print_duration = 0
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                result = (json.loads(f.read()))
+                fan = result.get("fan_state", "")
+                old_filament_used = result.get("filament_used", 0)
+                old_last_print_duration = result.get("last_print_duration", 0)
+        if fan_state and fan_state != fan:
+            state = fan_state
+        else:
+            state = fan
+        if filament_used and filament_used != old_filament_used:
+            pass
+        else:
+            filament_used = old_filament_used
+        if last_print_duration and last_print_duration != old_last_print_duration:
+            pass
+        else:
+            last_print_duration = old_last_print_duration
+
+        data = {
+            'file_path': file_name,
+            'absolute_coord': self.absolute_coord,
+            'absolute_extrude': self.absolute_extrude,
+            'speed_factor': self.speed_factor,
+            'extrude_factor': self.extrude_factor,
+            'fan_state': state,
+            'filament_used': filament_used,
+            'last_print_duration': last_print_duration,
+        }
+        with open(path, "w") as f:
+            f.write(json.dumps(data))
+            f.flush()
+
+    cmd_CX_SAVE_GCODE_STATE_help = "CX Save G-Code coordinate state"
+    # def cmd_CX_SAVE_GCODE_STATE(self, file_position, path, file_name):
+    def cmd_CX_SAVE_GCODE_STATE(self, file_position, path, line_pos):
+        import json
+        from subprocess import call
+        data = {
+            'file_position': file_position,
+            'base_position_e': round(list(self.base_position)[-1], 2),
+        }
+        cmd = "sed -i %sc'%s' %s" % (line_pos, json.dumps(data), path)
+        call(cmd, shell=True)
+        # with open(path, "w") as f:
+        #     f.write(json.dumps(data))
+        #     f.flush()
+
+    cmd_CX_RESTORE_GCODE_STATE_help = "Restore a previously saved G-Code state"
+    def cmd_CX_RESTORE_GCODE_STATE(self, path, file_name_path, XYZE):
+        try:
+            state = {
+                "absolute_extrude": True,
+                "file_position": 0,
+                "extrude_factor": 1.0,
+                "speed_factor": 0.0166666,
+                "homing_position": [0.0, 0.0, 0.0, 0.0],
+                "last_position": [0.0, 0.0, 0.0, 0.0],
+                "speed": 25.0,
+                "file_path": "",
+                "base_position": [0.0, 0.0, 0.0, -0.0],
+                "absolute_coord": True,
+                "fan_state": "",
+                "filament_used": 0,
+                "last_print_duration": 0,
+            }
+            import os, json
+            base_position_e = -1
+            with open(path, "r") as f:
+                ret = f.readlines()
+                info = {}
+                for obj in ret:
+                    obj = obj.strip("'").strip("\n")
+                    if len(obj) > 10:
+                        obj = eval(obj)
+                        if not info:
+                            info = obj
+                        else:
+                            if obj.get("file_position", 0) > info.get("file_position", 0):
+                                info = obj
+                ret = info
+                # ret = json.loads(f.read())
+                state["file_position"] = ret.get("file_position", 0)
+                state["base_position"] = [0.0, 0.0, 0.0, ret.get("base_position_e", -1)]
+                base_position_e = ret.get("base_position_e", -1)
+            with open(file_name_path, "r") as f:
+                file_info = json.loads(f.read())
+                state["file_path"] = file_info.get("file_path", "")
+                state["absolute_extrude"] = file_info.get("absolute_extrude", True)
+                state["absolute_coord"] = file_info.get("absolute_coord", True)
+                state["fan_state"] = file_info.get("fan_state", "")
+                state["speed_factor"] = file_info.get("speed_factor", 0.016666666)
+                state["extrude_factor"] = file_info.get("extrude_factor", 1.0)
+            state["last_position"] = [XYZE["X"], XYZE["Y"], XYZE["Z"], XYZE["E"]+base_position_e]
+
+            # Restore state
+            self.absolute_coord = state['absolute_coord']
+            # self.absolute_extrude = state['absolute_extrude']
+            self.base_position = list(state['base_position'])
+            self.homing_position = list(state['homing_position'])
+            self.speed = state['speed']
+            self.speed_factor = state['speed_factor']
+            self.extrude_factor = state['extrude_factor']
+            # Restore the relative E position
+            e_diff = self.last_position[3] - state['last_position'][3] - 0.5
+            # e_diff = self.last_position[3] - state['last_position'][3]
+            self.base_position[3] += e_diff
+            # Move the toolhead back if requested
+            gcode = self.printer.lookup_object('gcode')
+            if state["fan_state"]:
+                gcode.run_script(state["fan_state"])
+            gcode.run_script("BED_MESH_SET_DISABLE")
+            gcode.run_script("G28 X0 Y0")
+            gcode.run_script("G1 X%s Y%s F16000" % (state['last_position'][0], state['last_position'][1]))
+            x = self.last_position[0]
+            y = self.last_position[1]
+            z = self.last_position[2] + state['last_position'][2]
+            toolhead = self.printer.lookup_object("toolhead")
+            toolhead.set_position([x, y, z, self.last_position[3]], homing_axes=(2,))
+            speed = self.speed
+            self.last_position[:3] = state['last_position'][:3]
+            self.move_with_transform(self.last_position, speed)
+            gcode.run_script("G1 X%s Y%s F3000" % (state['last_position'][0], state['last_position'][1]))
+            gcode.run_script("M400")
+            self.absolute_extrude = state['absolute_extrude']
+        except Exception as err:
+            logging.exception("cmd_CX_RESTORE_GCODE_STATE err:%s" % err)
+
     cmd_SAVE_GCODE_STATE_help = "Save G-Code coordinate state"
     def cmd_SAVE_GCODE_STATE(self, gcmd):
         state_name = gcmd.get('NAME', 'default')
